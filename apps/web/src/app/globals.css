@@ -21,6 +21,9 @@
   --color-orange-hero: #eca469; /* EXACT */
   --color-white: #ffffff; /* EXACT — white/light card surface */
 
+  /* Colour — brand mark (logo only) */
+  --color-logo-navy: #0b1f49; /* EXACT — pixel-sampled from ui-home-page-01.jpg for the header/footer logo mark; not yet in docs/DESIGN_SYSTEM.md §3, pending a documentation-only follow-up task */
+
   /* Colour — action & accent */
   --color-primary-orange: #d65e2a; /* EXACT */
   --color-terracotta: #bb5036; /* EXACT */

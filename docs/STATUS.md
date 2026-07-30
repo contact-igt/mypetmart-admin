@@ -1,6 +1,6 @@
 # MyPetMart — Project Status
 
-Last updated: 2026-07-30 (visual foundation implemented)
+Last updated: 2026-07-30 (shared site shell implemented)
 
 ---
 
@@ -36,23 +36,46 @@ Last updated: 2026-07-30 (visual foundation implemented)
 | Global visual foundation completed — base styles, reduced-motion support, shared component classes (`.site-container`, `.section-block`, `.eyebrow`, `.display-heading`, `.body-copy`, `.button-primary`, `.button-secondary`, `.field-control`, `.warm-card`, `.pill-label`) | 2026-07-30 |
 | Temporary fonts wired via `next/font/google`: Fredoka (display), Fraunces italic (accent), Inter (body) — approximate, see D013 | 2026-07-30 |
 | Visual foundation preview available at `apps/web/src/app/page.tsx` — not the final homepage | 2026-07-30 |
+| Skill-principle scoping recorded — Ponytail/Emil Kowalski/taste-skill application zones aligned in `CLAUDE.md`, `DESIGN_SYSTEM.md` §2, `DECISIONS.md` D014 | 2026-07-30 |
+| Shared site shell built — announcement strip, desktop header (logo, centered nav, search/wishlist/account/cart icon cluster), responsive mobile header with slide-open nav panel, newsletter section, footer (contact details, social links, bottom bar) | 2026-07-30 |
+| New component directory `apps/web/src/components/` — `site-header`, `primary-nav`, `mobile-nav-panel`, `icon-button`, `announcement-strip`, `newsletter-card`, `site-footer`, `site-logo`, `icons` | 2026-07-30 |
+| `typecheck:web`, `lint:web`, `build:web` re-verified clean after shell build; manually checked at 375/768/1440px, keyboard nav, focus-visible, no horizontal overflow, zero console errors | 2026-07-30 |
 
 ---
 
 ## Current module
 
 **M4 — Customer-facing pages (Frontend Foundation)**
-Status: **In progress** — visual foundation implemented; full homepage not
-yet started.
+Status: **In progress** — shared site shell (header, nav, footer, newsletter)
+now implemented across all future pages via `layout.tsx`. Real page content
+for Home, Shop, Contact and Product Detail has not been built yet — the root
+route still renders the temporary visual-foundation preview between the new
+header and footer.
 
-`apps/web` now has design tokens, global styles and shared component
-classes, demonstrated on a temporary visual-foundation preview page. The
-locked storefront UI (Home, Shop, Contact, Product Detail) — header, nav,
-footer, and all real page content — has not been built yet.
+**Known gaps / judgement calls made during the shell build (see the shell-build
+task report for full detail):**
+- The header's trailing dark pill is ambiguous in the reference (§20 item 2 —
+  cart vs. menu, inconsistent between Home and Shop/Contact). Implemented as a
+  cart icon on desktop; the hamburger/mobile-nav toggle only appears at
+  mobile/tablet widths. Revisit if a live-site reference becomes available.
+- Search, wishlist, account and cart header icons are present but
+  intentionally non-functional (no onClick) — consistent with the wishlist
+  treatment already specified in `DESIGN_SYSTEM.md` §18 — since auth (M2),
+  product search (M4/Shop), and cart (M5) do not exist yet.
+- Nav links to `/shop` and `/contact` point at routes that don't exist yet
+  (will 404 until those pages are built) — expected at this stage of M4.
+- Footer "Cash on Delivery" payment claim omitted per D010/§18; the payments
+  row itself is preserved.
+- Logo mark is an inline-SVG reinterpretation of the reference dog+cat heart
+  icon, not a pixel trace (no source vector asset available).
+- One new colour value was pixel-sampled and used for the logo wordmark navy
+  (`--color-logo-navy: #0B1F49` in `globals.css`) — not yet present in
+  `DESIGN_SYSTEM.md` §3. Needs a documentation-only follow-up task to
+  formally add it to the token table (this task's scope only allowed
+  updating `docs/STATUS.md`).
 
-Next task: shared site shell (header with nav + icon cluster, footer with
-newsletter card and payment/social rows), built on top of the token/class
-foundation now in place.
+Next task: build the real Home page content (hero, category grid, feature
+stories, review grid) inside the shell now in place.
 
 ---
 
