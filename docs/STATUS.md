@@ -1,6 +1,6 @@
 # MyPetMart — Project Status
 
-Last updated: 2026-07-30 (M0 foundation committed)
+Last updated: 2026-07-30 (visual foundation implemented)
 
 ---
 
@@ -29,32 +29,30 @@ Last updated: 2026-07-30 (M0 foundation committed)
 | `docs/DESIGN_SYSTEM.md` rewritten with complete token set; `CLAUDE.md`, `docs/DECISIONS.md` updated to reference it | 2026-07-30 |
 | M0 foundation audit performed — result: PASS | 2026-07-30 |
 | First local commit created — all M0 files committed to `main` | 2026-07-30 |
+| `apps/web` scaffolded — Next.js 16.2.12, App Router, TypeScript (strict), Tailwind CSS 4.3.3 | 2026-07-30 |
+| `pnpm install`, `typecheck:web`, `lint:web`, `build:web` all pass | 2026-07-30 |
+| Dev server verified at http://localhost:3000 — HTTP 200, title "MyPetMart", no console errors | 2026-07-30 |
+| Design-token implementation completed — semantic CSS custom properties + Tailwind v4 `@theme inline` in `globals.css`, token IDs traceable to `DESIGN_SYSTEM.md` §3–6 | 2026-07-30 |
+| Global visual foundation completed — base styles, reduced-motion support, shared component classes (`.site-container`, `.section-block`, `.eyebrow`, `.display-heading`, `.body-copy`, `.button-primary`, `.button-secondary`, `.field-control`, `.warm-card`, `.pill-label`) | 2026-07-30 |
+| Temporary fonts wired via `next/font/google`: Fredoka (display), Fraunces italic (accent), Inter (body) — approximate, see D013 | 2026-07-30 |
+| Visual foundation preview available at `apps/web/src/app/page.tsx` — not the final homepage | 2026-07-30 |
 
 ---
 
 ## Current module
 
-**M0 — Security, repo setup, toolchain, documentation**
-Status: **COMPLETE**
-
-All foundational files are committed. No application code exists.
-
-MySQL provisioning and Prisma setup are deferred until the backend/data module
-(M1). They do not block the frontend scaffold.
-
----
-
-## Next module
-
 **M4 — Customer-facing pages (Frontend Foundation)**
-Pre-requisites:
-- `pnpm-workspace.yaml` in place ✓ — done
-- `apps/web` scaffolded with Next.js 16, TypeScript, Tailwind CSS
-- Design system extracted and documented ✓ — done (`docs/DESIGN_SYSTEM.md`)
+Status: **In progress** — visual foundation implemented; full homepage not
+yet started.
 
-Frontend scaffolding may proceed immediately. Before building the first page,
-triage the uncertainties in `docs/DESIGN_SYSTEM.md` §20 — none are hard
-blockers, but font family and exact layout measurements affect fidelity.
+`apps/web` now has design tokens, global styles and shared component
+classes, demonstrated on a temporary visual-foundation preview page. The
+locked storefront UI (Home, Shop, Contact, Product Detail) — header, nav,
+footer, and all real page content — has not been built yet.
+
+Next task: shared site shell (header with nav + icon cluster, footer with
+newsletter card and payment/social rows), built on top of the token/class
+foundation now in place.
 
 ---
 
@@ -64,6 +62,8 @@ blockers, but font family and exact layout measurements affect fidelity.
 Pre-requisites:
 - MySQL 8.4 available (OI-008 — unresolved)
 - `apps/api` scaffolded with Prisma initialised
+
+MySQL provisioning and Prisma setup are deferred. They do not block M4.
 
 **M3 — Product API + R2 image upload**
 Pre-requisites:
@@ -91,21 +91,35 @@ See `docs/OPEN_ITEMS.md` for the full dependency list.
 - No remote git host configured yet (GitHub/GitLab). Remote must be set up
   before team collaboration or CI can begin.
 - fnm shell hook lives in `~/.zshrc` (interactive zsh only). Non-interactive
-  shells (CI, hooks) must explicitly run `eval "$(fnm env --shell bash)"` or
-  equivalent before any Node/pnpm commands.
+  shells (CI, `.claude/launch.json`) must use the absolute pnpm binary path
+  under the fnm Node 24 installation, or explicitly run
+  `eval "$(fnm env --shell bash)"` before any Node/pnpm commands.
+- The dev server launched via `.claude/launch.json` runs under the system
+  Node 26.5.0 (pnpm binary is at the correct fnm path, but node itself
+  resolves to system version in that launch context). Functional for
+  development; pnpm emits an engines warning. Use the interactive zsh terminal
+  with fnm activated for production builds and CI.
 
 ## Unresolved visual uncertainties (see `docs/DESIGN_SYSTEM.md` §20 for full detail)
 
 - **Exact font families are unconfirmed** — not extractable from a
-  rasterised PDF. `DESIGN_SYSTEM.md` §4 proposes safe Google Fonts
-  alternatives (Fredoka/Baloo 2 for display, Fraunces italic for the serif
-  accent, Inter/Plus Jakarta Sans for body) but these are placeholders, not
-  confirmed matches.
+  rasterised PDF. Implemented in code as of this pass: Fredoka (display),
+  Fraunces italic (accent), Inter (body) via `next/font/google` — see
+  `docs/DECISIONS.md` D013. These are placeholders, not confirmed matches;
+  swap immediately if a higher-fidelity source becomes available.
 - **Several colour tokens are approximate, not exact**: `color-text-primary`,
   `color-teal-mint-accent`, `color-sale-badge` — 8 other tokens were
-  pixel-sampled and are exact (`docs/DESIGN_SYSTEM.md` §3).
+  pixel-sampled and are exact (`docs/DESIGN_SYSTEM.md` §3). Two further
+  tokens were *derived* (not sampled) for this implementation pass:
+  `color-text-muted` and `color-border-subtle` (`color-mix()` off existing
+  tokens — no new hex invented, see D013). `color-state-success` has no
+  locked value at all and currently aliases `color-mint-sage` as a
+  placeholder.
 - **Exact layout measurements are proportional estimates**, not measured CSS
   values (max-width, gutters, header height, button/input height, card radii).
+  These estimates are now encoded as CSS custom properties in
+  `apps/web/src/app/globals.css` — still approximate, easy to correct
+  centrally once real measurements are available.
 - **The Home page appears to show the "Premium grooming" feature story
   twice**, in two different visual treatments — most likely a scroll-pinned
   animation artifact from the PDF capture tool, not an intentional duplicate

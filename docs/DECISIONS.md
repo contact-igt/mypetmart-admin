@@ -124,3 +124,54 @@ from visual review. All Home/Shop/Contact slices were regenerated using
 `pdftoppm`'s native `-x -y -W -H` pixel crop instead, which was verified
 correct against known content three times before being trusted for the
 full re-slice.
+
+### D013 — Visual foundation implementation: CSS tokens, Tailwind v4 config, temporary fonts
+**Decision:** Design tokens are implemented as CSS custom properties in
+`apps/web/src/app/globals.css`, using Tailwind CSS v4.3.3's native CSS-first
+`@theme inline` block (no legacy `tailwind.config.*` file — none is required
+by this Tailwind version). Token IDs mirror `docs/DESIGN_SYSTEM.md` §3–6
+naming exactly (`color-cream-bg`, `color-peach-hero`, `color-primary-orange`,
+etc.) for direct traceability back to the locked reference. Certainty is
+labelled inline as EXACT, APPROXIMATE, DERIVED or PLACEHOLDER:
+- EXACT/APPROXIMATE values are copied verbatim from `DESIGN_SYSTEM.md` §3 —
+  no new hex values were invented.
+- DERIVED tokens (`color-text-muted`, `color-border-subtle`) are computed
+  from an existing EXACT/APPROXIMATE token via CSS `color-mix()`, since no
+  distinct value exists for "muted text" or "border" in the source.
+- PLACEHOLDER tokens (`color-surface-secondary`, `color-state-success`,
+  `color-state-destructive`) alias an existing locked token rather than
+  fabricate a new colour, because `DESIGN_SYSTEM.md` §3 explicitly notes no
+  distinct value was observed for a secondary warm surface or an in-stock/
+  success indicator, and the sale-badge colour is documented as "verify
+  against `color-terracotta`."
+- `color-focus-ring` is aliased to `color-deep-brown` (not
+  `color-primary-orange`) specifically for contrast reliability — a
+  primary-orange ring is too close in hue to the orange-hero section
+  background to remain visible; deep-brown holds contrast across every warm
+  surface in the palette.
+
+**Fonts (temporary, approximate — see `DESIGN_SYSTEM.md` §4, §20 item 3):**
+loaded via `next/font/google` in `apps/web/src/app/layout.tsx`:
+- Display heading: `Fredoka` (weights 500/600/700), fallback `"Baloo 2",
+  ui-rounded, system-ui, sans-serif`.
+- Display italic accent: `Fraunces` italic (weights 400/500), fallback
+  `"Playfair Display", Georgia, serif`.
+- Body / navigation: `Inter` (weights 400/500/600/700), fallback
+  `"Plus Jakarta Sans", system-ui, sans-serif`.
+
+These are the first implementation-safe alternatives already proposed in
+`DESIGN_SYSTEM.md` §4. **The font match remains approximate, not
+confirmed** — swap immediately if a live-site inspection or higher-fidelity
+source later provides the actual reference font names.
+
+**Also recorded:** removed create-next-app's default
+`@media (prefers-color-scheme: dark)` auto-invert from `globals.css`.
+MyPetMart has one locked, light, warm palette — not a dark-mode variant —
+per `DESIGN_SYSTEM.md` §1–2. Leaving the generic starter behaviour in place
+was an active bug (the page rendered on a black background under a dark OS
+preference) and is exactly the kind of "generic Tailwind starter template"
+drift CLAUDE.md's UI lock section prohibits.
+
+**Reason:** Keeps every visual value traceable to a specific, labelled
+source in `DESIGN_SYSTEM.md` rather than allowing implementation-time
+guesses to silently harden into "confirmed" values.

@@ -5,5 +5,11 @@
   "packageManager": "pnpm@11.18.0",
   "engines": {
     "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev:web": "pnpm --filter @mypetmart/web dev",
+    "build:web": "pnpm --filter @mypetmart/web build",
+    "lint:web": "pnpm --filter @mypetmart/web lint",
+    "typecheck:web": "pnpm --filter @mypetmart/web typecheck"
   }
 }
