@@ -8,6 +8,7 @@ import type { PlaceholderTone } from "@/components/image-placeholder";
  */
 
 export type ProductStatus = "active" | "draft" | "archived";
+export type PetType = "dog" | "cat" | "all";
 
 export type ProductVariant = {
   id: string;
@@ -17,34 +18,61 @@ export type ProductVariant = {
   stock: number;
 };
 
+export type ProductImage = {
+  id: string;
+  /** Placeholder content description — no licensed photography, see ImagePlaceholder. */
+  label: string;
+  tone: PlaceholderTone;
+  /** Editable accessible alt text, independent of `label`. */
+  alt: string;
+};
+
 export type Product = {
   id: string;
   name: string;
   slug: string;
+  sku: string;
   description: string;
   categoryId: string;
+  petType: PetType;
+  tags: string[];
+  featured: boolean;
   status: ProductStatus;
   price: number;
   originalPrice?: number;
   stock: number;
-  imageLabel: string;
-  tone: PlaceholderTone;
+  /** First image is the primary/listing image. */
+  images: ProductImage[];
   variants: ProductVariant[];
+  metaTitle?: string;
+  metaDescription?: string;
   createdAt: string;
   updatedAt: string;
 };
 
 export type ProductInput = Omit<Product, "id" | "slug" | "createdAt" | "updatedAt">;
 
+export type ProductSummary = {
+  total: number;
+  active: number;
+  draft: number;
+  archived: number;
+  outOfStock: number;
+};
+
 export type Category = {
   id: string;
   name: string;
   slug: string;
+  description: string;
+  petType: PetType;
   order: number;
   active: boolean;
+  /** Derived at read time from the current product set — never stored. */
+  productCount?: number;
 };
 
-export type CategoryInput = { name: string; active: boolean };
+export type CategoryInput = { name: string; description: string; petType: PetType; active: boolean };
 
 export type Customer = {
   id: string;
@@ -147,9 +175,13 @@ export type ListParams = {
   sortDir?: "asc" | "desc";
 };
 
+export type StockLevel = "in_stock" | "low_stock" | "out_of_stock";
+
 export type ProductListParams = ListParams & {
   categoryId?: string;
   status?: ProductStatus;
+  petType?: PetType;
+  stockLevel?: StockLevel;
 };
 
 export type OrderListParams = ListParams & {

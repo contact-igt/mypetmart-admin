@@ -23,6 +23,7 @@ import type {
   Product,
   ProductInput,
   ProductListParams,
+  ProductSummary,
   ReportsData,
   ReturnListParams,
   ReturnRequest,
@@ -62,6 +63,14 @@ function paginate<T>(items: T[], page = 1, pageSize = 10): ListResult<T> {
   };
 }
 
+const LOW_STOCK_THRESHOLD = 5;
+
+function matchesStockLevel(product: Product, level: NonNullable<ProductListParams["stockLevel"]>): boolean {
+  if (level === "out_of_stock") return product.stock === 0;
+  if (level === "low_stock") return product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD;
+  return product.stock > LOW_STOCK_THRESHOLD;
+}
+
 /**
  * In-memory, module-singleton implementation of AdminRepository. State lives
  * only for the browser session (resets on hard reload) — never localStorage.
@@ -87,14 +96,32 @@ class MockAdminRepository implements AdminRepository {
   }
 
   // ----------------------------------------------------------------- products
+  async getProductSummary(): Promise<ProductSummary> {
+    return delay({
+      total: this.products.length,
+      active: this.products.filter((p) => p.status === "active").length,
+      draft: this.products.filter((p) => p.status === "draft").length,
+      archived: this.products.filter((p) => p.status === "archived").length,
+      outOfStock: this.products.filter((p) => p.stock === 0).length,
+    });
+  }
+
   async listProducts(params: ProductListParams): Promise<ListResult<Product>> {
     let items = [...this.products];
     if (params.search) {
       const q = params.search.toLowerCase();
-      items = items.filter((p) => p.name.toLowerCase().includes(q) || p.slug.includes(q));
+      items = items.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.slug.includes(q) ||
+          p.sku.toLowerCase().includes(q) ||
+          p.variants.some((v) => v.sku.toLowerCase().includes(q)),
+      );
     }
     if (params.categoryId) items = items.filter((p) => p.categoryId === params.categoryId);
     if (params.status) items = items.filter((p) => p.status === params.status);
+    if (params.petType) items = items.filter((p) => p.petType === params.petType || p.petType === "all");
+    if (params.stockLevel) items = items.filter((p) => matchesStockLevel(p, params.stockLevel!));
 
     const sortBy = params.sortBy ?? "updatedAt";
     const dir = params.sortDir === "asc" ? 1 : -1;
@@ -138,6 +165,27 @@ class MockAdminRepository implements AdminRepository {
     return delay(clone(updated));
   }
 
+  async duplicateProduct(id: string): Promise<Product> {
+    const source = this.products.find((p) => p.id === id);
+    if (!source) throw new Error("Product not found");
+    const now = new Date().toISOString();
+    const newId = nextId("prod", this.products);
+    const copy: Product = {
+      ...clone(source),
+      id: newId,
+      name: `${source.name} (Copy)`,
+      slug: slugify(`${source.name}-copy-${newId}`),
+      sku: `${source.sku}-COPY`,
+      status: "draft",
+      images: source.images.map((img, i) => ({ ...img, id: `${newId}-img-${i + 1}` })),
+      variants: source.variants.map((v, i) => ({ ...v, id: `${newId}-v${i + 1}`, sku: `${v.sku}-COPY` })),
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.products = [copy, ...this.products];
+    return delay(clone(copy));
+  }
+
   async deleteProduct(id: string): Promise<void> {
     this.products = this.products.filter((p) => p.id !== id);
     return delay(undefined);
@@ -149,9 +197,24 @@ class MockAdminRepository implements AdminRepository {
     return delay(undefined);
   }
 
+  async bulkSetProductStatus(ids: string[], status: Product["status"]): Promise<void> {
+    const idSet = new Set(ids);
+    const now = new Date().toISOString();
+    this.products = this.products.map((p) => (idSet.has(p.id) ? { ...p, status, updatedAt: now } : p));
+    return delay(undefined);
+  }
+
   // --------------------------------------------------------------- categories
+  private productCountFor(categoryId: string): number {
+    return this.products.filter((p) => p.categoryId === categoryId).length;
+  }
+
   async listCategories(): Promise<Category[]> {
-    return delay([...this.categories].sort((a, b) => a.order - b.order));
+    return delay(
+      [...this.categories]
+        .sort((a, b) => a.order - b.order)
+        .map((c) => ({ ...c, productCount: this.productCountFor(c.id) })),
+    );
   }
 
   async createCategory(input: CategoryInput): Promise<Category> {
@@ -159,11 +222,13 @@ class MockAdminRepository implements AdminRepository {
       id: nextId("cat", this.categories),
       name: input.name,
       slug: slugify(input.name),
+      description: input.description,
+      petType: input.petType,
       active: input.active,
       order: this.categories.length,
     };
     this.categories = [...this.categories, category];
-    return delay(clone(category));
+    return delay({ ...clone(category), productCount: 0 });
   }
 
   async updateCategory(id: string, input: CategoryInput): Promise<Category> {
@@ -173,10 +238,25 @@ class MockAdminRepository implements AdminRepository {
       ...this.categories[index],
       name: input.name,
       slug: slugify(input.name),
+      description: input.description,
+      petType: input.petType,
       active: input.active,
     };
     this.categories[index] = updated;
-    return delay(clone(updated));
+    return delay({ ...clone(updated), productCount: this.productCountFor(id) });
+  }
+
+  async deleteCategory(id: string): Promise<void> {
+    const inUse = this.productCountFor(id);
+    if (inUse > 0) {
+      throw new Error(
+        `${inUse} product${inUse === 1 ? "" : "s"} still use this category. Deactivate it instead, or move those products first.`,
+      );
+    }
+    const index = this.categories.findIndex((c) => c.id === id);
+    if (index === -1) throw new Error("Category not found");
+    this.categories = this.categories.filter((c) => c.id !== id);
+    return delay(undefined);
   }
 
   async reorderCategory(id: string, direction: "up" | "down"): Promise<Category[]> {

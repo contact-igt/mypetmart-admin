@@ -1,6 +1,6 @@
 # MyPetMart — Project Status
 
-Last updated: 2026-08-04 (Admin dashboard refined into a filterable, India-focused commerce analytics view on deterministic demo data)
+Last updated: 2026-08-04 (Admin Product & Category management refined — multi-image editor, pet-type/stock filters, bulk actions, duplicate, delete-prevention)
 
 ---
 
@@ -71,6 +71,12 @@ Last updated: 2026-08-04 (Admin dashboard refined into a filterable, India-focus
 | One real bug found and fixed during interactive verification — duplicate React keys in the location ranked-list (state used as key when multiple cities share a state); fixed by separating the list's React key from its filter value | 2026-08-04 |
 | `scripts/verify-admin-dashboard.sh` added — gates typecheck/lint/build, required-module presence, forbidden out-of-scope features, live-wishlist-claim scanning, and blast-radius/dependency guards scoped by file mtime against the prior task's digest (git status alone can't distinguish this task's edits from earlier uncommitted work in the same session) | 2026-08-04 |
 | Full findings recorded in `docs/audits/admin-dashboard-refinement-digest.md` — all filters (individually and combined), funnel/location/traffic-source math, custom date range, empty state, keyboard focus and 375/768/1440px layouts interactively verified; Reports page (shares `bar-chart.tsx`/`status-overview.tsx` with the old dashboard) and all 3 storefront pages regression-checked with zero console errors | 2026-08-04 |
+| Product/Category admin management refined — data layer extended with `PetType`, multi-image `ProductImage[]` (replacing the single imageLabel/tone pair), SKU, tags, featured flag, meta title/description, and category description/petType/derived productCount; all 14 fixture products and 6 categories migrated to the new shape without touching `dashboard-fixtures.ts` (which only reads id/price, confirmed unaffected) | 2026-08-04 |
+| Products list rebuilt — 5 summary stat cards (total/active/draft/archived/out-of-stock), category/pet-type/status/stock-level filters, a Newest/Name/Price/Stock sort dropdown alongside existing column-header sorting, active-filter chips, bulk activate/deactivate/archive (added to existing bulk delete), per-row duplicate action | 2026-08-04 |
+| Product editor rebuilt — sectioned layout (basic info, pricing/inventory, variants, SEO, images), multi-image manager (add/remove/reorder/set-primary/alt text, "Storage integration required" notice), tag chips, SEO meta fields with a live search-result preview, sticky save-draft/publish footer, unsaved-changes dirty tracking with a `beforeunload` guard and cancel-discard confirmation, duplicate-as-new-draft action (unique id/slug/SKU) | 2026-08-04 |
+| Categories refined — description/pet-type fields, live product-count per category, delete action that blocks and suggests deactivation when products are assigned (with a one-click "Deactivate instead" shortcut), reorder/edit/activate flows unchanged and re-verified | 2026-08-04 |
+| `scripts/verify-admin-products.sh` added — same build-gate/blast-radius/dependency-guard pattern as the dashboard verifier, scoped against `admin-dashboard-refinement-digest.md`'s mtime | 2026-08-04 |
+| Full findings recorded in `docs/audits/admin-products-refinement-digest.md` — search/filter/sort/pagination combinations, bulk actions, create→edit→duplicate→delete chain, image manager, validation, unsaved-changes warning, category CRUD/reorder/delete-prevention all interactively verified; `/admin` dashboard and `/admin/orders` regression-checked with zero console errors | 2026-08-04 |
 
 ---
 

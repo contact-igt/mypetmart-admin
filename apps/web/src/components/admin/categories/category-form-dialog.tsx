@@ -1,9 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import type { Category } from "@/data/admin/types";
+import type { Category, CategoryInput, PetType } from "@/data/admin/types";
 import { Dialog } from "../ui/dialog";
 import { FormField, ADMIN_INPUT_CLASS } from "../ui/form-field";
+
+const PET_TYPES: { value: PetType; label: string }[] = [
+  { value: "dog", label: "Dogs" },
+  { value: "cat", label: "Cats" },
+  { value: "all", label: "Works for all pets" },
+];
 
 /**
  * Owns its own form state, initialised once from props. No reset effect
@@ -18,11 +24,13 @@ function CategoryFormFields({
   saving,
 }: {
   category: Category | null;
-  onSubmit: (input: { name: string; active: boolean }) => void;
+  onSubmit: (input: CategoryInput) => void;
   onClose: () => void;
   saving: boolean;
 }) {
   const [name, setName] = useState(category?.name ?? "");
+  const [description, setDescription] = useState(category?.description ?? "");
+  const [petType, setPetType] = useState<PetType>(category?.petType ?? "all");
   const [active, setActive] = useState(category?.active ?? true);
   const [error, setError] = useState("");
 
@@ -32,7 +40,7 @@ function CategoryFormFields({
       setError("Category name is required.");
       return;
     }
-    onSubmit({ name: name.trim(), active });
+    onSubmit({ name: name.trim(), description: description.trim(), petType, active });
   }
 
   return (
@@ -49,8 +57,26 @@ function CategoryFormFields({
           autoFocus
         />
       </FormField>
+      <FormField label="Description" htmlFor="cat-description" optional>
+        <textarea
+          id="cat-description"
+          rows={2}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          className={`${ADMIN_INPUT_CLASS} resize-none`}
+        />
+      </FormField>
+      <FormField label="Pet type" htmlFor="cat-pet-type">
+        <select id="cat-pet-type" value={petType} onChange={(e) => setPetType(e.target.value as PetType)} className={ADMIN_INPUT_CLASS}>
+          {PET_TYPES.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+      </FormField>
       <label className="flex items-center gap-2 text-sm text-text-primary">
-        <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4" />
+        <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4 accent-primary-orange" />
         Active (visible in the shop)
       </label>
       <div className="mt-1 flex justify-end gap-2">
@@ -82,7 +108,7 @@ export function CategoryFormDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  onSubmit: (input: { name: string; active: boolean }) => void;
+  onSubmit: (input: CategoryInput) => void;
   category: Category | null;
   saving: boolean;
 }) {

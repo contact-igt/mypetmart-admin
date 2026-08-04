@@ -12,6 +12,7 @@ import type {
   Product,
   ProductInput,
   ProductListParams,
+  ProductSummary,
   ReportsData,
   ReturnListParams,
   ReturnRequest,
@@ -29,16 +30,20 @@ export interface AdminRepository {
   getDashboardFilterOptions(): Promise<DashboardFilterOptions>;
   getDashboardAnalytics(filter: DashboardFilter): Promise<DashboardAnalyticsResult>;
 
+  getProductSummary(): Promise<ProductSummary>;
   listProducts(params: ProductListParams): Promise<ListResult<Product>>;
   getProduct(id: string): Promise<Product | null>;
   createProduct(input: ProductInput): Promise<Product>;
   updateProduct(id: string, input: ProductInput): Promise<Product>;
+  duplicateProduct(id: string): Promise<Product>;
   deleteProduct(id: string): Promise<void>;
   bulkDeleteProducts(ids: string[]): Promise<void>;
+  bulkSetProductStatus(ids: string[], status: Product["status"]): Promise<void>;
 
   listCategories(): Promise<Category[]>;
   createCategory(input: CategoryInput): Promise<Category>;
   updateCategory(id: string, input: CategoryInput): Promise<Category>;
+  deleteCategory(id: string): Promise<void>;
   reorderCategory(id: string, direction: "up" | "down"): Promise<Category[]>;
   setCategoryActive(id: string, active: boolean): Promise<Category>;
 
