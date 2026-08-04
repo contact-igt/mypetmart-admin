@@ -29,6 +29,7 @@
   --color-terracotta: #bb5036; /* EXACT */
   --color-mint-sage: #d4ecd6; /* EXACT */
   --color-yellow-card: #ffd96a; /* EXACT */
+  --color-teal-mint-accent: #7fe0c8; /* APPROXIMATE — DESIGN_SYSTEM.md §3; "NEW" product badge, distinct (brighter) than color-mint-sage */
 
   /* Colour — text */
   --color-text-primary: #2b1b14; /* APPROXIMATE — DESIGN_SYSTEM.md §3 */
