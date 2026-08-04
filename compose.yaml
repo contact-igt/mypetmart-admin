@@ -1,0 +1,35 @@
+# Local development database for apps/api. Not used in production hosting.
+# Credentials here are local-dev defaults (also mirrored in apps/api's
+# config/env.ts fallback) — override via a repo-root .env, never commit one.
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-mypetmart}
+      MYSQL_USER: ${MYSQL_USER:-mypetmart}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-mypetmart_dev_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-mypetmart_root_dev_password}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mypetmart_mysql_data:/var/lib/mysql
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-u",
+          "root",
+          "-p${MYSQL_ROOT_PASSWORD:-mypetmart_root_dev_password}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  mypetmart_mysql_data:

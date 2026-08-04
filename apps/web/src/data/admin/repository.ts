@@ -5,10 +5,13 @@ import type {
   DashboardAnalyticsResult,
   DashboardFilter,
   DashboardFilterOptions,
+  FulfilmentStatus,
   ListResult,
   Order,
   OrderListParams,
   OrderStatus,
+  OrderSummary,
+  PaymentStatus,
   Product,
   ProductInput,
   ProductListParams,
@@ -17,6 +20,7 @@ import type {
   ReturnListParams,
   ReturnRequest,
   ReturnStatus,
+  ShippingDetailsInput,
   StoreSettings,
 } from "./types";
 
@@ -47,10 +51,16 @@ export interface AdminRepository {
   reorderCategory(id: string, direction: "up" | "down"): Promise<Category[]>;
   setCategoryActive(id: string, active: boolean): Promise<Category>;
 
+  getOrderSummary(): Promise<OrderSummary>;
   listOrders(params: OrderListParams): Promise<ListResult<Order>>;
   getOrder(id: string): Promise<Order | null>;
   updateOrderStatus(id: string, status: OrderStatus): Promise<Order>;
+  updateOrderFulfilmentStatus(id: string, status: FulfilmentStatus): Promise<Order>;
+  updateOrderPaymentStatus(id: string, status: PaymentStatus): Promise<Order>;
+  updateOrderShippingDetails(id: string, input: ShippingDetailsInput): Promise<Order>;
+  bulkUpdateOrderStatus(ids: string[], status: OrderStatus): Promise<{ updated: number; skipped: number }>;
   addOrderNote(id: string, message: string): Promise<Order>;
+  getReturnsForOrder(orderId: string): Promise<ReturnRequest[]>;
 
   listCustomers(params: { page?: number; pageSize?: number; search?: string }): Promise<
     ListResult<Customer>

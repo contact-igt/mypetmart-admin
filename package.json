@@ -10,6 +10,12 @@
     "dev:web": "pnpm --filter @mypetmart/web dev",
     "build:web": "pnpm --filter @mypetmart/web build",
     "lint:web": "pnpm --filter @mypetmart/web lint",
-    "typecheck:web": "pnpm --filter @mypetmart/web typecheck"
+    "typecheck:web": "pnpm --filter @mypetmart/web typecheck",
+    "dev:api": "pnpm --filter @mypetmart/api dev",
+    "typecheck:api": "pnpm --filter @mypetmart/api typecheck",
+    "lint:api": "pnpm --filter @mypetmart/api lint",
+    "test:api": "pnpm --filter @mypetmart/api test",
+    "prisma:validate": "pnpm --filter @mypetmart/api prisma:validate",
+    "prisma:generate": "pnpm --filter @mypetmart/api prisma:generate"
   }
 }

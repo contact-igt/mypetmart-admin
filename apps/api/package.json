@@ -1,0 +1,30 @@
+{
+  "name": "@mypetmart/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "node --watch src/server.ts",
+    "start": "node src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "node --test",
+    "prisma:validate": "DATABASE_URL=\"mysql://mypetmart:mypetmart_dev_password@localhost:3306/mypetmart\" prisma validate",
+    "prisma:generate": "DATABASE_URL=\"mysql://mypetmart:mypetmart_dev_password@localhost:3306/mypetmart\" prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.2",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.13.3",
+    "eslint": "^9.39.5",
+    "prisma": "^6.19.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.65.0"
+  }
+}

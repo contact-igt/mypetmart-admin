@@ -1,6 +1,6 @@
 # MyPetMart — Project Status
 
-Last updated: 2026-08-04 (Admin Product & Category management refined — multi-image editor, pet-type/stock filters, bulk actions, duplicate, delete-prevention)
+Last updated: 2026-08-04 (Admin Orders & Fulfilment refined — 7-state order status with validated transitions, fulfilment/payment tracking, bulk actions)
 
 ---
 
@@ -77,6 +77,12 @@ Last updated: 2026-08-04 (Admin Product & Category management refined — multi-
 | Categories refined — description/pet-type fields, live product-count per category, delete action that blocks and suggests deactivation when products are assigned (with a one-click "Deactivate instead" shortcut), reorder/edit/activate flows unchanged and re-verified | 2026-08-04 |
 | `scripts/verify-admin-products.sh` added — same build-gate/blast-radius/dependency-guard pattern as the dashboard verifier, scoped against `admin-dashboard-refinement-digest.md`'s mtime | 2026-08-04 |
 | Full findings recorded in `docs/audits/admin-products-refinement-digest.md` — search/filter/sort/pagination combinations, bulk actions, create→edit→duplicate→delete chain, image manager, validation, unsaved-changes warning, category CRUD/reorder/delete-prevention all interactively verified; `/admin` dashboard and `/admin/orders` regression-checked with zero console errors | 2026-08-04 |
+| Orders & Fulfilment admin management refined — `OrderStatus` extended from 5 to 7 values (added `confirmed`, `return_requested`); new independent `FulfilmentStatus` (unfulfilled→processing→packed→shipped→delivered) and extended `PaymentStatus` (added `failed`) state machines; `order-status-rules.ts` added as the single source of truth for legal transitions, enforced both client-side (only valid options ever offered) and server-side in `mock-repository.ts` (rejects illegal transitions regardless of what the client sends) | 2026-08-04 |
+| Orders list rebuilt — 7 summary stat cards, phone/email-aware search, payment/fulfilment/product/state filters, Newest/Oldest/Highest/Lowest-value sort, active-filter chips, per-row inline status update + quick note, bulk confirm/processing/shipped (each confirmed, each reporting updated-vs-skipped-as-ineligible counts) | 2026-08-04 |
+| Order detail rebuilt — items now show SKU/variant, structured city/state address, editable shipping method/carrier/tracking-number demo fields, independently editable fulfilment and payment status (both validated, both timeline-logged), order-status control restricted to legal next states with confirmation on cancel/return-request, a return-request-linked banner (new `getReturnsForOrder` method), and "Email/SMS customer" buttons that honestly show an "integration required" toast | 2026-08-04 |
+| One real bug found and fixed during interactive verification — a new `return_requested` fixture order's timeline entry was timestamped *before* its "Delivered" entry (logically impossible); fixed by deriving the return-requested timestamp from the delivered entry's own offset | 2026-08-04 |
+| `scripts/verify-admin-orders.sh` added — same build-gate/blast-radius/dependency-guard pattern as the two prior verifiers, scoped against `admin-products-refinement-digest.md`'s mtime; also greps for payment-gateway SDK usage, live courier API calls, and fake email/SMS/refund success claims | 2026-08-04 |
+| Full findings recorded in `docs/audits/admin-orders-refinement-digest.md` — combined filters, bulk-action skip/update reporting, invalid-transition rejection (verified via a deliberate client-side bypass), fulfilment/payment/tracking edits, timeline ordering, return-request linking, and cross-route consistency (`/admin/customers/[id]`) all interactively verified; dashboard, returns, reports and all 3 storefront pages regression-checked with zero console errors | 2026-08-04 |
 
 ---
 

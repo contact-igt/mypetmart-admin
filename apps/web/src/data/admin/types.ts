@@ -83,11 +83,28 @@ export type Customer = {
   joinedAt: string;
 };
 
-export type OrderStatus = "pending" | "processing" | "shipped" | "delivered" | "cancelled";
+/**
+ * pending -> confirmed -> processing -> shipped -> delivered is the canonical
+ * forward path. cancelled is reachable from any pre-delivery stage;
+ * return_requested is reachable only from delivered. Both are terminal. See
+ * order-status-rules.ts for the enforced transition graph — this type only
+ * declares the vocabulary, not which moves are legal.
+ */
+export type OrderStatus = "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "return_requested";
+
+/** Separate from OrderStatus — fulfilment tracks the physical pack/ship pipeline independently of the order's commercial status. */
+export type FulfilmentStatus = "unfulfilled" | "processing" | "packed" | "shipped" | "delivered";
+
+/** Separate from OrderStatus and FulfilmentStatus — see order-status-rules.ts. */
+export type PaymentStatus = "pending" | "paid" | "failed" | "refunded";
+
+export type ShippingMethod = "standard" | "express";
 
 export type OrderItem = {
   productId: string;
   name: string;
+  sku: string;
+  variantLabel?: string;
   quantity: number;
   price: number;
 };
@@ -111,16 +128,39 @@ export type Order = {
   customerId: string;
   customerName: string;
   status: OrderStatus;
+  fulfilmentStatus: FulfilmentStatus;
   items: OrderItem[];
   subtotal: number;
   shippingFee: number;
   total: number;
   paymentMethod: string;
-  paymentStatus: "paid" | "pending" | "refunded";
+  paymentStatus: PaymentStatus;
   shippingAddress: string;
+  city: string;
+  state: string;
+  shippingMethod: ShippingMethod;
+  /** Demo fields only — no live courier integration. Editable during the session. */
+  carrier: string;
+  trackingNumber: string;
   placedAt: string;
   timeline: TimelineEvent[];
   notes: Note[];
+};
+
+export type OrderSummary = {
+  total: number;
+  pending: number;
+  processing: number;
+  shipped: number;
+  delivered: number;
+  cancelled: number;
+  returns: number;
+};
+
+export type ShippingDetailsInput = {
+  shippingMethod: ShippingMethod;
+  carrier: string;
+  trackingNumber: string;
 };
 
 export type ReturnType = "return" | "replacement";
@@ -186,6 +226,10 @@ export type ProductListParams = ListParams & {
 
 export type OrderListParams = ListParams & {
   status?: OrderStatus;
+  paymentStatus?: PaymentStatus;
+  fulfilmentStatus?: FulfilmentStatus;
+  productId?: string;
+  state?: string;
   from?: string;
   to?: string;
 };

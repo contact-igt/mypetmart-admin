@@ -1,6 +1,11 @@
 import type { AdminRepository } from "./repository";
 import { computeDashboardAnalytics, getDashboardFilterOptions as getDashboardFilterOptionsSync } from "./dashboard-analytics";
 import {
+  getValidNextFulfilmentStatuses,
+  getValidNextOrderStatuses,
+  getValidNextPaymentStatuses,
+} from "./order-status-rules";
+import {
   CATEGORIES,
   CUSTOMERS,
   ORDERS,
@@ -15,11 +20,14 @@ import type {
   DashboardAnalyticsResult,
   DashboardFilter,
   DashboardFilterOptions,
+  FulfilmentStatus,
   ListResult,
   Note,
   Order,
   OrderListParams,
   OrderStatus,
+  OrderSummary,
+  PaymentStatus,
   Product,
   ProductInput,
   ProductListParams,
@@ -28,6 +36,7 @@ import type {
   ReturnListParams,
   ReturnRequest,
   ReturnStatus,
+  ShippingDetailsInput,
   StoreSettings,
 } from "./types";
 
@@ -283,20 +292,53 @@ class MockAdminRepository implements AdminRepository {
   }
 
   // ------------------------------------------------------------------ orders
+  private appendTimeline(order: Order, label: string): Order {
+    return {
+      ...order,
+      timeline: [...order.timeline, { id: `t-${order.timeline.length + 1}-${Date.now()}`, label, at: new Date().toISOString() }],
+    };
+  }
+
+  async getOrderSummary(): Promise<OrderSummary> {
+    return delay({
+      total: this.orders.length,
+      pending: this.orders.filter((o) => o.status === "pending").length,
+      processing: this.orders.filter((o) => o.status === "processing").length,
+      shipped: this.orders.filter((o) => o.status === "shipped").length,
+      delivered: this.orders.filter((o) => o.status === "delivered").length,
+      cancelled: this.orders.filter((o) => o.status === "cancelled").length,
+      returns: this.orders.filter((o) => o.status === "return_requested").length,
+    });
+  }
+
   async listOrders(params: OrderListParams): Promise<ListResult<Order>> {
     let items = [...this.orders];
     if (params.search) {
       const q = params.search.toLowerCase();
-      items = items.filter(
-        (o) => o.orderNumber.toLowerCase().includes(q) || o.customerName.toLowerCase().includes(q),
-      );
+      items = items.filter((o) => {
+        const customer = this.customers.find((c) => c.id === o.customerId);
+        return (
+          o.orderNumber.toLowerCase().includes(q) ||
+          o.customerName.toLowerCase().includes(q) ||
+          (customer?.email.toLowerCase().includes(q) ?? false) ||
+          (customer?.phone.toLowerCase().includes(q) ?? false)
+        );
+      });
     }
     if (params.status) items = items.filter((o) => o.status === params.status);
+    if (params.paymentStatus) items = items.filter((o) => o.paymentStatus === params.paymentStatus);
+    if (params.fulfilmentStatus) items = items.filter((o) => o.fulfilmentStatus === params.fulfilmentStatus);
+    if (params.productId) items = items.filter((o) => o.items.some((i) => i.productId === params.productId));
+    if (params.state) items = items.filter((o) => o.state === params.state);
     if (params.from) items = items.filter((o) => o.placedAt >= params.from!);
     if (params.to) items = items.filter((o) => o.placedAt <= params.to!);
 
     const dir = params.sortDir === "asc" ? 1 : -1;
-    items.sort((a, b) => (new Date(a.placedAt).getTime() - new Date(b.placedAt).getTime()) * dir);
+    if (params.sortBy === "total") {
+      items.sort((a, b) => (a.total - b.total) * dir);
+    } else {
+      items.sort((a, b) => (new Date(a.placedAt).getTime() - new Date(b.placedAt).getTime()) * dir);
+    }
 
     return delay(paginate(items, params.page, params.pageSize ?? 10));
   }
@@ -309,16 +351,64 @@ class MockAdminRepository implements AdminRepository {
     const index = this.orders.findIndex((o) => o.id === id);
     if (index === -1) throw new Error("Order not found");
     const order = this.orders[index];
-    const updated: Order = {
-      ...order,
-      status,
-      timeline: [
-        ...order.timeline,
-        { id: `t-${order.timeline.length + 1}`, label: `Status changed to ${status}`, at: new Date().toISOString() },
-      ],
-    };
+    if (!getValidNextOrderStatuses(order.status).includes(status)) {
+      throw new Error(`Cannot move an order from "${order.status}" to "${status}".`);
+    }
+    const updated = this.appendTimeline({ ...order, status }, `Status changed to ${status.replace(/_/g, " ")}`);
     this.orders[index] = updated;
     return delay(clone(updated));
+  }
+
+  async updateOrderFulfilmentStatus(id: string, status: FulfilmentStatus): Promise<Order> {
+    const index = this.orders.findIndex((o) => o.id === id);
+    if (index === -1) throw new Error("Order not found");
+    const order = this.orders[index];
+    if (!getValidNextFulfilmentStatuses(order.fulfilmentStatus).includes(status)) {
+      throw new Error(`Cannot move fulfilment from "${order.fulfilmentStatus}" to "${status}".`);
+    }
+    const updated = this.appendTimeline({ ...order, fulfilmentStatus: status }, `Fulfilment changed to ${status}`);
+    this.orders[index] = updated;
+    return delay(clone(updated));
+  }
+
+  async updateOrderPaymentStatus(id: string, status: PaymentStatus): Promise<Order> {
+    const index = this.orders.findIndex((o) => o.id === id);
+    if (index === -1) throw new Error("Order not found");
+    const order = this.orders[index];
+    if (!getValidNextPaymentStatuses(order.paymentStatus).includes(status)) {
+      throw new Error(`Cannot move payment from "${order.paymentStatus}" to "${status}".`);
+    }
+    const updated = this.appendTimeline({ ...order, paymentStatus: status }, `Payment changed to ${status}`);
+    this.orders[index] = updated;
+    return delay(clone(updated));
+  }
+
+  async updateOrderShippingDetails(id: string, input: ShippingDetailsInput): Promise<Order> {
+    const index = this.orders.findIndex((o) => o.id === id);
+    if (index === -1) throw new Error("Order not found");
+    const order = this.orders[index];
+    const updated = this.appendTimeline(
+      { ...order, shippingMethod: input.shippingMethod, carrier: input.carrier, trackingNumber: input.trackingNumber },
+      input.trackingNumber ? `Tracking updated — ${input.carrier} ${input.trackingNumber}` : "Shipping details updated",
+    );
+    this.orders[index] = updated;
+    return delay(clone(updated));
+  }
+
+  async bulkUpdateOrderStatus(ids: string[], status: OrderStatus): Promise<{ updated: number; skipped: number }> {
+    const idSet = new Set(ids);
+    let updated = 0;
+    let skipped = 0;
+    this.orders = this.orders.map((o) => {
+      if (!idSet.has(o.id)) return o;
+      if (!getValidNextOrderStatuses(o.status).includes(status)) {
+        skipped += 1;
+        return o;
+      }
+      updated += 1;
+      return this.appendTimeline({ ...o, status }, `Status changed to ${status.replace(/_/g, " ")} (bulk update)`);
+    });
+    return delay({ updated, skipped });
   }
 
   async addOrderNote(id: string, message: string): Promise<Order> {
@@ -332,6 +422,10 @@ class MockAdminRepository implements AdminRepository {
     };
     this.orders[index] = { ...this.orders[index], notes: [...this.orders[index].notes, note] };
     return delay(clone(this.orders[index]));
+  }
+
+  async getReturnsForOrder(orderId: string): Promise<ReturnRequest[]> {
+    return delay(this.returns.filter((r) => r.orderId === orderId).map(clone));
   }
 
   // --------------------------------------------------------------- customers

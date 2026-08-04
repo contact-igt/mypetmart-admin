@@ -330,6 +330,30 @@ export const CUSTOMERS: Customer[] = [
 
 const STATUS_CYCLE: OrderStatus[] = ["delivered", "delivered", "shipped", "processing", "pending", "cancelled"];
 
+/** Every demo customer's home address is in one of these two cities — used to fill Order.city/state without inventing new customer data. */
+const CUSTOMER_LOCATION: Record<string, { city: string; state: string }> = {
+  "cust-1": { city: "Chennai", state: "Tamil Nadu" },
+  "cust-2": { city: "Bengaluru", state: "Karnataka" },
+  "cust-3": { city: "Chennai", state: "Tamil Nadu" },
+  "cust-4": { city: "Chennai", state: "Tamil Nadu" },
+  "cust-5": { city: "Bengaluru", state: "Karnataka" },
+  "cust-6": { city: "Chennai", state: "Tamil Nadu" },
+  "cust-7": { city: "Chennai", state: "Tamil Nadu" },
+  "cust-8": { city: "Bengaluru", state: "Karnataka" },
+  "cust-9": { city: "Chennai", state: "Tamil Nadu" },
+  "cust-10": { city: "Chennai", state: "Tamil Nadu" },
+};
+
+const CARRIERS = ["Blue Dart", "Delhivery", "India Post", "Ecom Express"];
+
+/** Fulfilment starts out matching order status at creation time, then the two evolve independently once an admin edits either. */
+function initialFulfilmentStatus(status: OrderStatus): Order["fulfilmentStatus"] {
+  if (status === "processing") return "processing";
+  if (status === "shipped") return "shipped";
+  if (status === "delivered" || status === "return_requested") return "delivered";
+  return "unfulfilled";
+}
+
 function buildOrder(
   index: number,
   daysBack: number,
@@ -341,23 +365,39 @@ function buildOrder(
   const shippingFee = subtotal > 999 ? 0 : 79;
   const status = statusOverride ?? STATUS_CYCLE[index % STATUS_CYCLE.length];
   const placedAt = daysAgo(daysBack, 9 + (index % 8));
+  const confirmedStages: OrderStatus[] = ["confirmed", "processing", "shipped", "delivered", "return_requested"];
+  const processingStages: OrderStatus[] = ["processing", "shipped", "delivered", "return_requested"];
+  const shippedStages: OrderStatus[] = ["shipped", "delivered", "return_requested"];
+  const deliveredStages: OrderStatus[] = ["delivered", "return_requested"];
 
   const timeline: Order["timeline"] = [{ id: "t1", label: "Order placed", at: placedAt }];
   if (status !== "pending") {
     timeline.push({ id: "t2", label: "Payment confirmed", at: daysAgo(daysBack, 10) });
   }
-  if (["processing", "shipped", "delivered"].includes(status)) {
+  if (confirmedStages.includes(status)) {
+    timeline.push({ id: "t2b", label: "Order confirmed", at: daysAgo(daysBack, 10) });
+  }
+  if (processingStages.includes(status)) {
     timeline.push({ id: "t3", label: "Processing started", at: daysAgo(Math.max(daysBack - 1, 0), 11) });
   }
-  if (["shipped", "delivered"].includes(status)) {
+  if (shippedStages.includes(status)) {
     timeline.push({ id: "t4", label: "Shipped", at: daysAgo(Math.max(daysBack - 2, 0), 14) });
   }
-  if (status === "delivered") {
+  if (deliveredStages.includes(status)) {
     timeline.push({ id: "t5", label: "Delivered", at: daysAgo(Math.max(daysBack - 4, 0), 16) });
+  }
+  if (status === "return_requested") {
+    // Must land after "Delivered" chronologically (daysAgo lower = more recent; hour 20 > delivered's hour 16 covers the same-day case too).
+    const deliveredDaysAgo = Math.max(daysBack - 4, 0);
+    timeline.push({ id: "t6", label: "Return requested", at: daysAgo(Math.max(deliveredDaysAgo - 1, 0), 20) });
   }
   if (status === "cancelled") {
     timeline.push({ id: "t5", label: "Cancelled", at: daysAgo(Math.max(daysBack - 1, 0), 12) });
   }
+
+  const location = CUSTOMER_LOCATION[customer.id] ?? { city: "Chennai", state: "Tamil Nadu" };
+  const shippingMethod: Order["shippingMethod"] = index % 3 === 0 ? "express" : "standard";
+  const hasShipped = shippedStages.includes(status);
 
   return {
     id: `order-${index + 1}`,
@@ -365,9 +405,12 @@ function buildOrder(
     customerId: customer.id,
     customerName: customer.name,
     status,
+    fulfilmentStatus: initialFulfilmentStatus(status),
     items: items.map((i) => ({
       productId: i.product.id,
       name: i.product.name,
+      sku: i.product.sku,
+      variantLabel: i.product.variants[0]?.label,
       quantity: i.quantity,
       price: i.product.price,
     })),
@@ -375,8 +418,13 @@ function buildOrder(
     shippingFee,
     total: subtotal + shippingFee,
     paymentMethod: index % 3 === 0 ? "UPI" : index % 3 === 1 ? "Card" : "Net Banking",
-    paymentStatus: status === "cancelled" ? "refunded" : "paid",
+    paymentStatus: status === "cancelled" ? "refunded" : status === "pending" ? "pending" : "paid",
     shippingAddress: customer.address,
+    city: location.city,
+    state: location.state,
+    shippingMethod,
+    carrier: hasShipped ? CARRIERS[index % CARRIERS.length] : "",
+    trackingNumber: hasShipped ? `AWB${1000 + index}IN` : "",
     placedAt,
     timeline,
     notes:
@@ -391,14 +439,14 @@ const p = (id: string) => PRODUCTS.find((product) => product.id === id)!;
 export const ORDERS: Order[] = [
   buildOrder(0, 0, CUSTOMERS[0], [{ product: p("prod-1"), quantity: 1 }], "pending"),
   buildOrder(1, 0, CUSTOMERS[1], [{ product: p("prod-3"), quantity: 1 }, { product: p("prod-6"), quantity: 1 }], "processing"),
-  buildOrder(2, 1, CUSTOMERS[2], [{ product: p("prod-2"), quantity: 2 }], "processing"),
+  buildOrder(2, 1, CUSTOMERS[2], [{ product: p("prod-2"), quantity: 2 }], "confirmed"),
   buildOrder(3, 1, CUSTOMERS[3], [{ product: p("prod-5"), quantity: 1 }], "shipped"),
   buildOrder(4, 2, CUSTOMERS[4], [{ product: p("prod-4"), quantity: 1 }, { product: p("prod-7"), quantity: 2 }], "shipped"),
   buildOrder(5, 3, CUSTOMERS[5], [{ product: p("prod-8"), quantity: 3 }], "delivered"),
   buildOrder(6, 3, CUSTOMERS[6], [{ product: p("prod-1"), quantity: 1 }], "delivered"),
   buildOrder(7, 4, CUSTOMERS[7], [{ product: p("prod-10"), quantity: 1 }], "delivered"),
   buildOrder(8, 5, CUSTOMERS[8], [{ product: p("prod-11"), quantity: 1 }, { product: p("prod-12"), quantity: 1 }], "delivered"),
-  buildOrder(9, 6, CUSTOMERS[9], [{ product: p("prod-14"), quantity: 1 }], "delivered"),
+  buildOrder(9, 6, CUSTOMERS[9], [{ product: p("prod-14"), quantity: 1 }], "return_requested"),
   buildOrder(10, 7, CUSTOMERS[0], [{ product: p("prod-6"), quantity: 1 }], "delivered"),
   buildOrder(11, 8, CUSTOMERS[1], [{ product: p("prod-3"), quantity: 1 }], "cancelled"),
   buildOrder(12, 9, CUSTOMERS[2], [{ product: p("prod-2"), quantity: 1 }], "delivered"),
@@ -492,6 +540,19 @@ export const RETURNS: ReturnRequest[] = [
     reason: "Buckle feels loose on the medium size.",
     status: "requested",
     requestedAt: daysAgo(0),
+    notes: [],
+  },
+  {
+    id: "ret-7",
+    orderId: "order-10",
+    orderNumber: ORDERS[9].orderNumber,
+    customerId: "cust-10",
+    customerName: "Rohit V.",
+    productName: "Warm Fleece Pet Blanket",
+    type: "return",
+    reason: "Blanket shed more than expected after the first wash.",
+    status: "requested",
+    requestedAt: daysAgo(5),
     notes: [],
   },
 ];
