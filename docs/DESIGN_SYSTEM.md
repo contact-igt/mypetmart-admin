@@ -47,6 +47,12 @@ scrolled desktop viewport at approximately 2200pt wide.
 
 Taste-skill dials: DESIGN_VARIANCE=5 · MOTION_INTENSITY=3 · VISUAL_DENSITY=6
 
+These dials describe the intended character of Home, Shop, Contact and editorial
+storefront pages only. They are descriptive benchmarks — the locked UI reference
+PDFs (§1) always take precedence. Do not use them to override or reinterpret
+anything documented in this file, and do not apply editorial taste variance to
+admin, checkout or account surfaces.
+
 ---
 
 ## 3. Colour tokens

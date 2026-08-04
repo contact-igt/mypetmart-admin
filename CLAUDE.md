@@ -26,6 +26,8 @@ Full stack spec → `docs/PROJECT_BRIEF.md`
 - No premature abstractions — three similar lines beat one over-engineered helper.
 - No half-finished implementations — only build what the task requires.
 - Reuse one established pattern per concern.
+- Security, input validation, accessibility, error handling and necessary tests
+  are never subject to the minimal-code rule — always implement these fully.
 
 ## UI lock
 - The Home, Shop and Contact PDF references (and their rendered images in
@@ -53,7 +55,16 @@ Full stack spec → `docs/PROJECT_BRIEF.md`
   below and `docs/DESIGN_SYSTEM.md` §18 before rendering any trust badge,
   review, rating or stock label.
 
-Taste-skill dials: DESIGN_VARIANCE=5 · MOTION_INTENSITY=3 · VISUAL_DENSITY=6
+Taste-skill dials (Home, Shop, Contact and editorial storefront pages only):
+DESIGN_VARIANCE=5 · MOTION_INTENSITY=3 · VISUAL_DENSITY=6
+
+These dials are descriptive benchmarks — not a licence to reinvent. The locked
+UI reference PDFs always take precedence over the dials. Admin, checkout and
+account pages prioritise clarity and function; do not apply editorial taste
+variance to those surfaces.
+
+Do not install or copy the Ponytail, Emil Kowalski or taste-skill repositories
+into this project.
 
 Design tokens, component specs, breakpoints → `docs/DESIGN_SYSTEM.md`
 
@@ -105,11 +116,15 @@ All open items → `docs/OPEN_ITEMS.md`
 ## Frontend conventions
 - All data fetching via the REST API — never direct DB calls from `apps/web`.
 - Never use mock data to mask API failures in production.
-- Inline form errors — no modal or toast for validation.
-- Hover transitions ≤ 150ms.
+- Inline form errors — no modal or toast for validation (all pages).
+- Visible keyboard focus on all interactive elements (all pages).
+- Respect `prefers-reduced-motion` (all pages).
 - 4px spacing rhythm.
-- Visible keyboard focus on all interactive elements.
-- Respect `prefers-reduced-motion`.
+- Hover transitions ≤ 150ms.
+- Animate only when motion aids task completion. On customer-facing storefront
+  pages (Home, Shop, Product Detail, Contact) this means restrained, purposeful
+  motion consistent with MOTION_INTENSITY=3. On admin, checkout and account
+  pages avoid decorative motion entirely — clarity and task completion first.
 - No gradient text, glassmorphism, emoji UI icons or decorative animation.
 
 ## Build commands (once apps are scaffolded)

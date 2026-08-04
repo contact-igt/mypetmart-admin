@@ -125,6 +125,31 @@ from visual review. All Home/Shop/Contact slices were regenerated using
 correct against known content three times before being trusted for the
 full re-slice.
 
+### D014 — Skill-principle scoping: Ponytail, Emil Kowalski, taste-skill
+**Decision:** Three approved skill principles are in scope for this project,
+each with a bounded application zone:
+
+- **Ponytail (minimal-code):** applies to all code. Native/platform APIs before
+  libraries; no premature abstractions; no half-finished implementations. Does
+  **not** apply to security, input validation, accessibility, error handling or
+  necessary tests — these are always implemented fully.
+- **Emil Kowalski (interaction):** applies to customer-facing storefront UI
+  (Home, Shop, Product Detail, Contact) only. Animate only when motion aids
+  task completion; restrained motion consistent with MOTION_INTENSITY=3; visible
+  focus and inline errors on all pages. Admin, checkout and account pages
+  prioritise clarity and function — no decorative motion.
+- **Taste-skill (design character):** applies to Home, Shop, Contact and
+  editorial storefront pages only. The locked UI reference PDFs (D009, D012)
+  always take precedence over the taste-skill dials. The dials are descriptive
+  benchmarks, not a licence to reinvent.
+
+**Rule:** Do not install or copy the Ponytail, Emil Kowalski or taste-skill
+repositories into this project — the principles are applied as written rules,
+not as code dependencies.
+**Reason:** Scoping prevents misapplication of aesthetic or motion principles to
+functional-first surfaces (admin, checkout), and prevents the "minimal-code"
+shorthand from being used to justify cutting security or accessibility work.
+
 ### D013 — Visual foundation implementation: CSS tokens, Tailwind v4 config, temporary fonts
 **Decision:** Design tokens are implemented as CSS custom properties in
 `apps/web/src/app/globals.css`, using Tailwind CSS v4.3.3's native CSS-first
