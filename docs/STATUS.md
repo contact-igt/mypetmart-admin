@@ -1,6 +1,6 @@
 # MyPetMart — Project Status
 
-Last updated: 2026-07-30 (Shop + Contact pages built; Home audit corrections applied; scripts/verify-storefront.sh added)
+Last updated: 2026-08-04 (Admin dashboard refined into a filterable, India-focused commerce analytics view on deterministic demo data)
 
 ---
 
@@ -52,6 +52,25 @@ Last updated: 2026-07-30 (Shop + Contact pages built; Home audit corrections app
 | `scripts/verify-storefront.sh` created — gates typecheck/lint/build, route existence, required-section presence, forbidden-claim scanning, and blast-radius (no apps/api/prisma/.env changes); validated both positive (exit 0) and negative (exit 1 on injected violation) | 2026-07-30 |
 | Full storefront verified in-browser at 375/768/1440px across `/`, `/shop`, `/contact` — HTTP 200, no overflow, no console errors, keyboard focus visible, Shop filtering confirmed functional | 2026-07-30 |
 | Full findings recorded in `docs/audits/storefront-loop-digest.md` | 2026-07-30 |
+| `apps/api` scaffolded — Express 5.2 + TypeScript (ESM, `nodenext`), app/server separation (`app.ts`/`server.ts`), central config (`config/env.ts`, Node-native `process.loadEnvFile`, no dotenv), error middleware (`HttpError` + central handler, never leaks raw DB errors), `GET /health` | 2026-08-04 |
+| Prisma ORM wired under `apps/api/prisma/schema.prisma` — pinned to `prisma`/`@prisma/client` 6.19.2 (not npm `latest` 7.9.1 — see digest); `prisma:validate` and `prisma:generate` both pass | 2026-08-04 |
+| `compose.yaml` added at repo root — MySQL 8.4, healthcheck, named persistent volume; structurally validated but never run (Docker not installed on this machine) | 2026-08-04 |
+| `.env.example` added at repo root (shared by `compose.yaml` + `apps/api`); no real `.env` created or committed | 2026-08-04 |
+| Root scripts added: `dev:api`, `typecheck:api`, `lint:api`, `test:api`, `prisma:validate`, `prisma:generate` — all pass except the DB-dependent portion of `/health` | 2026-08-04 |
+| `apps/api` test suite added via Node's built-in test runner (`node --test`, native `fetch`, no supertest) — 2/2 passing, asserts `/health` never leaks the connection string or credentials regardless of DB state | 2026-08-04 |
+| `pnpm-workspace.yaml` `allowBuilds` extended for `prisma`/`@prisma/client`/`@prisma/engines` (same pattern as existing `sharp`/`unrs-resolver` entries) — required workspace-wide fix, approved before applying since it was outside the task's original blast radius | 2026-08-04 |
+| Full findings recorded in `docs/audits/api-foundation-digest.md` | 2026-08-04 |
+| Admin panel frontend built on demo data — all 13 routes (`/admin` dashboard, products list/new/edit, categories, orders list/detail, customers list/detail, returns list/detail, reports, settings); shared shell (sidebar, mobile drawer, breadcrumbs, search, demo-mode banner) and UI primitives (toast, dialog, drawer, data table, pagination, empty/loading/error states) hand-built with no new packages | 2026-08-04 |
+| Typed `AdminRepository` + in-memory `mockAdminRepository` under `apps/web/src/data/admin/` — one fixture location, Promise-based, session-only state (no localStorage), designed for a drop-in REST swap later | 2026-08-04 |
+| `apps/web/src/app/layout.tsx` updated to route storefront chrome (header/footer) around `/` `/shop` `/contact` only, via new `storefront-chrome.tsx`, so `/admin/*` gets its own shell — the only shared file this task touched; storefront rendering confirmed byte-identical before/after | 2026-08-04 |
+| Product/category/order/return demo CRUD flows interactively verified in-browser (not just inspected) — create/edit/delete/bulk-delete products, reorder/deactivate/add categories, update order status + notes, toast on CSV-export attempt; two real bugs found and fixed (invisible mobile-nav-drawer text, focus-restore timing on dialog close) | 2026-08-04 |
+| `typecheck:web`, `lint:web`, `build:web` all pass; all 16 routes (13 admin + 3 storefront) return HTTP 200; no horizontal overflow at 375/768/1440px; storefront regression-checked | 2026-08-04 |
+| Full findings recorded in `docs/audits/admin-ui-loop-digest.md`; plan recorded in `docs/ADMIN_PANEL_PLAN.md` | 2026-08-04 |
+| `/admin` dashboard refined into a filterable commerce analytics view — verified against the live `mypetmart.org` (catalogue, shipping policy, refund policy, official social links) before implementation; deterministic 90-day `CommerceEvent` dataset (`apps/web/src/data/admin/dashboard-fixtures.ts`) and pure aggregation engine (`dashboard-analytics.ts`) added, kept fully separate from the existing Product/Order/Customer fixtures | 2026-08-04 |
+| Global filters (date preset/custom range, compare-to-previous-period, product, order status, state, traffic source) plus all 12 dashboard sections (commerce summary, sales/orders/units trend, conversion funnel, product performance, product-interest tracking with a labelled wishlist-inactive notice, order-status donut with click-to-filter, shipping & fulfilment, India location performance, customer overview, returns & service issues, traffic sources, deterministic business insights) built with no new packages — charts are hand-built SVG/CSS | 2026-08-04 |
+| One real bug found and fixed during interactive verification — duplicate React keys in the location ranked-list (state used as key when multiple cities share a state); fixed by separating the list's React key from its filter value | 2026-08-04 |
+| `scripts/verify-admin-dashboard.sh` added — gates typecheck/lint/build, required-module presence, forbidden out-of-scope features, live-wishlist-claim scanning, and blast-radius/dependency guards scoped by file mtime against the prior task's digest (git status alone can't distinguish this task's edits from earlier uncommitted work in the same session) | 2026-08-04 |
+| Full findings recorded in `docs/audits/admin-dashboard-refinement-digest.md` — all filters (individually and combined), funnel/location/traffic-source math, custom date range, empty state, keyboard focus and 375/768/1440px layouts interactively verified; Reports page (shares `bar-chart.tsx`/`status-overview.tsx` with the old dashboard) and all 3 storefront pages regression-checked with zero console errors | 2026-08-04 |
 
 ---
 
@@ -195,19 +214,71 @@ and Contact are both now built and verified (`docs/audits/storefront-loop-digest
 
 ---
 
+## M7 — Admin dashboard + product management (2026-08-04)
+
+Status: **Frontend complete on demo data.** All 13 routes built, shared
+shell + UI primitives hand-built (no new packages), typed `AdminRepository`
++ in-memory mock implementation under `apps/web/src/data/admin/`. Full
+details, interaction test results and the two bugs found+fixed during
+verification are in `docs/audits/admin-ui-loop-digest.md`; the
+information-architecture plan is in `docs/ADMIN_PANEL_PLAN.md`.
+
+**Explicitly not done yet (out of this task's scope):**
+- No authentication — the admin panel is reachable at `/admin` with no
+  login gate. Settings' "Admin users" section says so explicitly. Needs M2
+  (JWT auth) before this is real.
+- No real backend — every read/write goes through `mockAdminRepository`,
+  an in-memory singleton that resets on a hard page reload. Swapping in a
+  `RestAdminRepository` against `apps/api` is future work; the interface
+  is already shaped for it.
+- No real product images — the Products form's image panel is explicit
+  that this needs Cloudflare R2 (M3, OI-007).
+- Payment gateway, shipping partner, CSV export, analytics — all visually
+  present as clearly labelled "Integration required" placeholders, not
+  silently faked.
+
+**Known judgement calls:**
+- Category reorder uses move-up/move-down buttons, not drag-and-drop
+  (keyboard-accessible by construction; avoids needing a DnD library under
+  the "install no packages" constraint).
+- `apps/web/src/app/layout.tsx` was modified — the only shared/root file
+  this task touched, needed so `/admin/*` doesn't inherit the storefront's
+  header/footer/newsletter. `/`, `/shop`, `/contact` confirmed to render
+  identically to before.
+
+**2026-08-04 refinement — `/admin` dashboard only:** the dashboard route was
+rebuilt into a filterable, India-focused commerce analytics view powered by
+a new deterministic 90-day event dataset, verified against the live
+`mypetmart.org` site first. Full details in
+`docs/audits/admin-dashboard-refinement-digest.md`. Products, Categories,
+Orders, Customers, Returns and Settings were not redesigned — only the
+dashboard route and its own data/component files changed. One notable
+judgement call: the dashboard's "Recent orders" table is drawn from the new
+event dataset (`EVT-###` order numbers), a separate analytics rollup from
+the small `Order[]` fixture `/admin/orders` uses — the same
+analytics-vs-management-detail split most real commerce platforms have, not
+an oversight.
+
+---
+
 ## Deferred (not blocking frontend)
 
 **M1 — Database schema + Prisma migrations**
 Pre-requisites:
-- MySQL 8.4 available (OI-008 — unresolved)
-- `apps/api` scaffolded with Prisma initialised
+- MySQL 8.4 available (OI-008 — updated: `compose.yaml` is ready, blocked
+  only on Docker being installed — see Blockers)
+- `apps/api` scaffolded with Prisma initialised — **done** (2026-08-04,
+  `docs/audits/api-foundation-digest.md`); schema has no models yet, that's
+  M1's actual work
 
-MySQL provisioning and Prisma setup are deferred. They do not block M4.
+Prisma tooling (`prisma:validate`/`prisma:generate`) is live and passing.
+Actual schema design + migrations remain deferred until Docker is available
+to verify against a real database. Does not block M4.
 
 **M3 — Product API + R2 image upload**
 Pre-requisites:
 - Cloudflare R2 credentials (OI-007 — unresolved)
-- `apps/api` scaffolded
+- `apps/api` scaffolded — **done** (2026-08-04)
 
 ---
 
@@ -215,7 +286,7 @@ Pre-requisites:
 
 | ID | Blocker | Affects |
 |----|---------|---------|
-| OI-008 | MySQL 8.4 not installed locally, no host selected | M1 |
+| OI-008 | MySQL 8.4 not installed locally, no host selected — **updated 2026-08-04**: `compose.yaml` is ready and structurally validated; the actual blocker now is Docker/Docker Compose not being installed on this machine at all (not just the container). `docker compose up -d` once Docker exists should unblock this immediately. | M1 |
 | OI-001 | Payment gateway not selected | M5 |
 | OI-002 | Shipping provider not selected | M5 |
 | OI-007 | Cloudflare R2 credentials not available | M3 |

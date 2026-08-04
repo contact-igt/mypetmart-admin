@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Fredoka, Fraunces, Inter } from "next/font/google";
-import { SiteHeader } from "@/components/site-header";
-import { SiteFooter } from "@/components/site-footer";
+import { StorefrontChrome } from "@/components/storefront-chrome";
 import "./globals.css";
 
 const fredoka = Fredoka({
@@ -39,9 +38,7 @@ export default function RootLayout({
       className={`${fredoka.variable} ${fraunces.variable} ${inter.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <SiteHeader />
-        {children}
-        <SiteFooter />
+        <StorefrontChrome>{children}</StorefrontChrome>
       </body>
     </html>
   );
