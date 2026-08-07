@@ -2,49 +2,27 @@
 
 import Link from "next/link";
 import { useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { adminRepository } from "@/data/admin/mock-repository";
-import type { Order } from "@/data/admin/types";
+import { fetchAdminCustomerDetail } from "@/lib/api/admin-customer-api";
 import { useAdminData } from "../ui/use-admin-data";
-import { LoadingState, ErrorState, EmptyState } from "../ui/empty-state";
-import { DataTable, type Column } from "../ui/data-table";
+import { LoadingState, ErrorState } from "../ui/empty-state";
 import { StatCard } from "../ui/stat-card";
 import { StatusBadge } from "../ui/status-badge";
 import { MailIcon, PhoneIcon, PinIcon } from "@/components/icons";
 
-const currency = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
-
-function formatDate(iso: string): string {
+function formatDate(iso?: string | null): string {
+  if (!iso) return "Never";
   return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 export function CustomerDetailView({ customerId }: { customerId: string }) {
-  const router = useRouter();
   const fetcher = useCallback(
-    async () => {
-      const [customer, orders] = await Promise.all([
-        adminRepository.getCustomer(customerId),
-        adminRepository.getCustomerOrders(customerId),
-      ]);
-      return { customer, orders };
-    },
+    () => fetchAdminCustomerDetail(customerId),
     [customerId],
   );
-  const { data, loading, error, reload } = useAdminData(fetcher);
+  const { data: customer, loading, error, reload } = useAdminData(fetcher);
 
-  if (loading) return <LoadingState label="Loading customer…" />;
-  if (error || !data?.customer) return <ErrorState message={error ?? "Customer not found."} onRetry={reload} />;
-
-  const { customer, orders } = data;
-  const totalSpent = orders.reduce((sum, o) => sum + (o.status === "cancelled" ? 0 : o.total), 0);
-  const avgOrder = orders.length > 0 ? totalSpent / orders.length : 0;
-
-  const columns: Column<Order>[] = [
-    { key: "orderNumber", header: "Order", render: (o) => <span className="font-medium">{o.orderNumber}</span> },
-    { key: "placedAt", header: "Date", render: (o) => formatDate(o.placedAt) },
-    { key: "total", header: "Total", render: (o) => currency.format(o.total) },
-    { key: "status", header: "Status", render: (o) => <StatusBadge status={o.status} /> },
-  ];
+  if (loading) return <LoadingState label="Loading customer profile…" />;
+  if (error || !customer) return <ErrorState message={error ?? "Customer not found."} onRetry={reload} />;
 
   return (
     <div className="flex flex-col gap-5">
@@ -52,14 +30,22 @@ export function CustomerDetailView({ customerId }: { customerId: string }) {
         <Link href="/admin/customers" className="text-xs font-semibold text-primary-orange hover:underline">
           &larr; Back to customers
         </Link>
-        <h1 className="mt-1 text-xl font-bold text-text-primary">{customer.name}</h1>
-        <p className="mt-1 text-sm text-text-primary/60">Customer since {formatDate(customer.joinedAt)}</p>
+        <div className="mt-1 flex items-center gap-3">
+          <h1 className="text-xl font-bold text-text-primary">{customer.name}</h1>
+          <span className="font-mono text-xs font-semibold text-text-primary/70 rounded bg-cream-bg px-2 py-0.5 border border-border-subtle">
+            {customer.referenceCode ?? `CUS-${customer.id}`}
+          </span>
+          <StatusBadge status={customer.status === "disabled" ? "cancelled" : "delivered"} />
+        </div>
+        <p className="mt-1 text-sm text-text-primary/60">
+          Customer since {formatDate(customer.joinedAt)} · Last login: {formatDate(customer.lastLoginAt)}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <StatCard label="Total orders" value={String(orders.length)} />
-        <StatCard label="Total spent" value={currency.format(totalSpent)} />
-        <StatCard label="Average order" value={currency.format(avgOrder)} />
+        <StatCard label="Account Status" value={customer.status === "disabled" ? "Disabled" : "Active"} />
+        <StatCard label="Numeric DB ID" value={String(customer.id)} />
+        <StatCard label="Addresses Count" value={String(customer.addresses?.length ?? 0)} />
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
@@ -82,16 +68,35 @@ export function CustomerDetailView({ customerId }: { customerId: string }) {
         </div>
 
         <div className="lg:col-span-2">
-          <h2 className="mb-2 text-sm font-semibold text-text-primary">Order history</h2>
-          {orders.length === 0 ? (
-            <EmptyState title="No orders yet" description="This customer hasn't placed any demo orders." />
+          <h2 className="mb-2 text-sm font-semibold text-text-primary">Saved Addresses</h2>
+          {!customer.addresses || customer.addresses.length === 0 ? (
+            <div className="rounded-xl border border-border-subtle bg-white p-6 text-center text-sm text-text-primary/60">
+              No saved addresses found for this customer.
+            </div>
           ) : (
-            <DataTable
-              columns={columns}
-              rows={orders}
-              getRowId={(o) => o.id}
-              onRowClick={(o) => router.push(`/admin/orders/${o.id}`)}
-            />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {customer.addresses.map((addr) => (
+                <div key={addr.id} className="rounded-xl border border-border-subtle bg-white p-4 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-text-primary">{addr.fullName}</span>
+                    {addr.isDefault && (
+                      <span className="rounded bg-primary-orange/10 px-2 py-0.5 text-xs font-medium text-primary-orange">
+                        Default
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-text-primary/70">{addr.phone}</p>
+                  <p className="mt-1 text-text-primary/80">
+                    {addr.addressLine1}
+                    {addr.addressLine2 ? `, ${addr.addressLine2}` : ""}
+                  </p>
+                  <p className="text-text-primary/80">
+                    {addr.city}, {addr.state} - {addr.postalCode}
+                  </p>
+                  <p className="text-xs text-text-primary/50 uppercase mt-1">{addr.countryCode}</p>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>

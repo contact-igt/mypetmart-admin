@@ -136,7 +136,7 @@ function generateEvents(): CommerceEvent[] {
         type: "session_started",
         at,
         sessionId,
-        customerId: returningCustomer?.id,
+        customerId: returningCustomer ? String(returningCustomer.id) : undefined,
         source,
         state: location.state,
         city: location.city,
@@ -155,7 +155,7 @@ function generateEvents(): CommerceEvent[] {
           type: "product_viewed",
           at,
           sessionId,
-          customerId: returningCustomer?.id,
+          customerId: returningCustomer ? String(returningCustomer.id) : undefined,
           productId,
           source,
           state: location.state,
@@ -172,7 +172,7 @@ function generateEvents(): CommerceEvent[] {
         type: "added_to_cart",
         at,
         sessionId,
-        customerId: returningCustomer?.id,
+        customerId: returningCustomer ? String(returningCustomer.id) : undefined,
         productId: primaryProductId,
         quantity: cartQuantity,
         source,
@@ -187,7 +187,7 @@ function generateEvents(): CommerceEvent[] {
         type: "checkout_started",
         at,
         sessionId,
-        customerId: returningCustomer?.id,
+        customerId: returningCustomer ? String(returningCustomer.id) : undefined,
         productId: primaryProductId,
         source,
         state: location.state,
@@ -198,7 +198,7 @@ function generateEvents(): CommerceEvent[] {
 
       orderCounter += 1;
       const orderId = `evt-order-${orderCounter}`;
-      const customerId = returningCustomer ? returningCustomer.id : `guest-${(guestCounter += 1)}`;
+      const customerId = returningCustomer ? String(returningCustomer.id) : `guest-${(guestCounter += 1)}`;
       const shippingMode: ShippingMode = rng() < 0.72 ? "standard" : "express";
       const orderStatus = computeOrderStatus(rng, daysAgo, shippingMode);
 

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useAdminAuth } from "@/context/admin-auth-context";
 import { getBreadcrumbs } from "./nav-config";
 import { adminRepository } from "@/data/admin/mock-repository";
 import { MenuIcon, SearchIcon, UserIcon } from "@/components/icons";
@@ -10,6 +11,7 @@ import { MenuIcon, SearchIcon, UserIcon } from "@/components/icons";
 type QuickResult = { label: string; sublabel: string; href: string };
 
 export function AdminHeader({ onOpenMenu }: { onOpenMenu: () => void }) {
+  const { user, logout } = useAdminAuth();
   const pathname = usePathname();
   const router = useRouter();
   const breadcrumbs = getBreadcrumbs(pathname ?? "/admin");
@@ -132,9 +134,16 @@ export function AdminHeader({ onOpenMenu }: { onOpenMenu: () => void }) {
             <UserIcon width={16} height={16} />
           </span>
           <div className="leading-tight">
-            <p className="text-sm font-semibold text-text-primary">Demo Admin</p>
-            <p className="text-xs text-text-primary/50">Not signed in</p>
+            <p className="text-sm font-semibold text-text-primary">{user?.name ?? "Admin"}</p>
+            <p className="text-xs text-text-primary/50 capitalize">{user?.role ?? "Signed in"}</p>
           </div>
+          <button
+            type="button"
+            onClick={() => void logout()}
+            className="ml-2 rounded-lg border border-border-subtle bg-white px-2.5 py-1 text-xs font-medium text-text-primary transition-colors hover:bg-cream-bg hover:text-primary-orange"
+          >
+            Log out
+          </button>
         </div>
       </div>
     </header>

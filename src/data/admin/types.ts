@@ -75,12 +75,27 @@ export type Category = {
 export type CategoryInput = { name: string; description: string; petType: PetType; active: boolean };
 
 export type Customer = {
-  id: string;
+  id: number | string;
+  referenceCode?: string;
   name: string;
   email: string;
   phone: string;
+  status?: string;
   address: string;
   joinedAt: string;
+  lastLoginAt?: string | null;
+  addresses?: Array<{
+    id: number;
+    fullName: string;
+    phone: string;
+    addressLine1: string;
+    addressLine2: string | null;
+    city: string;
+    state: string;
+    postalCode: string;
+    countryCode: string;
+    isDefault: boolean;
+  }>;
 };
 
 /**
