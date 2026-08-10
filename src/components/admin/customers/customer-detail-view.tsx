@@ -35,7 +35,7 @@ export function CustomerDetailView({ customerId }: { customerId: string }) {
           <span className="font-mono text-xs font-semibold text-text-primary/70 rounded bg-cream-bg px-2 py-0.5 border border-border-subtle">
             {customer.referenceCode ?? `CUS-${customer.id}`}
           </span>
-          <StatusBadge status={customer.status === "disabled" ? "cancelled" : "delivered"} />
+          <StatusBadge status={customer.status ?? "active"} />
         </div>
         <p className="mt-1 text-sm text-text-primary/60">
           Customer since {formatDate(customer.joinedAt)} · Last login: {formatDate(customer.lastLoginAt)}

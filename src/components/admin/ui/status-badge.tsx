@@ -18,6 +18,8 @@ const TONE_CLASSES: Record<string, string> = {
   active: "bg-mint-sage text-text-primary",
   draft: "bg-cream-bg text-text-primary/70 border border-border-subtle",
   archived: "bg-deep-brown/10 text-deep-brown",
+  // customer account statuses
+  disabled: "bg-terracotta/15 text-terracotta",
   // return statuses
   requested: "bg-yellow-card text-text-primary",
   approved: "bg-mint-sage text-text-primary",

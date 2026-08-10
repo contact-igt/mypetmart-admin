@@ -1,4 +1,12 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000/api/v1";
+import {
+  adminApiRequest,
+  adminPublicRequest,
+  getAdminAccessToken,
+  refreshAdminSession,
+  setAdminAccessToken,
+} from "@/lib/api/admin-api-client";
+
+export { getAdminAccessToken, setAdminAccessToken } from "@/lib/api/admin-api-client";
 
 export type SafeAdminUser = {
   id: number;
@@ -12,101 +20,39 @@ export type SafeAdminUser = {
   createdAt: string;
 };
 
-export type AdminAuthResponse = {
-  success: boolean;
-  data: {
+export async function adminSignin(email: string, password: string): Promise<SafeAdminUser> {
+  const data = await adminPublicRequest<{
     user: SafeAdminUser;
     accessToken?: string;
-  };
-};
-
-let inMemoryAccessToken: string | null = null;
-
-export function setAdminAccessToken(token: string | null): void {
-  inMemoryAccessToken = token;
-}
-
-export function getAdminAccessToken(): string | null {
-  return inMemoryAccessToken;
-}
-
-export async function adminSignin(email: string, password: string): Promise<SafeAdminUser> {
-  const response = await fetch(`${API_BASE}/admin/auth/signin`, {
+  }>("/admin/auth/signin", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
     body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
   });
 
-  const payload = await response.json();
-  if (!response.ok || !payload.success) {
-    throw new Error(payload?.error?.message || "Invalid credentials.");
-  }
-
-  setAdminAccessToken(payload.data.accessToken ?? null);
-  return payload.data.user;
+  setAdminAccessToken(data.accessToken ?? null);
+  return data.user;
 }
 
-export async function adminRefresh(): Promise<string> {
-  const response = await fetch(`${API_BASE}/admin/auth/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-  });
-
-  const payload = await response.json();
-  if (!response.ok || !payload.success) {
-    setAdminAccessToken(null);
-    throw new Error(payload?.error?.message || "Failed to refresh session.");
-  }
-
-  const token = payload.data.accessToken;
-  setAdminAccessToken(token);
-  return token;
+export function adminRefresh(): Promise<string> {
+  return refreshAdminSession();
 }
 
-export async function adminGetMe(token?: string): Promise<SafeAdminUser> {
-  const authToken = token || inMemoryAccessToken;
-  if (!authToken) {
-    throw new Error("No access token available.");
-  }
-
-  const response = await fetch(`${API_BASE}/admin/auth/me`, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${authToken}`,
-    },
-    credentials: "include",
-  });
-
-  const payload = await response.json();
-  if (!response.ok || !payload.success) {
-    throw new Error(payload?.error?.message || "Failed to fetch user profile.");
-  }
-
-  if (payload.data.user.role !== "admin" && payload.data.user.role !== "super_admin") {
+export async function adminGetMe(): Promise<SafeAdminUser> {
+  const user = await adminApiRequest<SafeAdminUser>("/admin/auth/me");
+  if (user.role !== "admin" && user.role !== "super_admin") {
     setAdminAccessToken(null);
     throw new Error("Access denied. Admin privileges required.");
   }
-
-  return payload.data.user;
+  return user;
 }
 
 export async function adminLogout(): Promise<void> {
   try {
-    if (inMemoryAccessToken) {
-      await fetch(`${API_BASE}/admin/auth/logout`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${inMemoryAccessToken}`,
-        },
-        credentials: "include",
-      });
+    if (getAdminAccessToken()) {
+      await adminApiRequest<null>("/admin/auth/logout", { method: "POST" });
     }
   } catch {
-    // Ignore logout network errors
+    // Local logout must still complete if the session is already invalid.
   } finally {
     setAdminAccessToken(null);
   }

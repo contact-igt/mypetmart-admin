@@ -29,9 +29,11 @@ function CategoryFormFields({
   saving: boolean;
 }) {
   const [name, setName] = useState(category?.name ?? "");
+  const [slug, setSlug] = useState(category?.slug ?? "");
   const [description, setDescription] = useState(category?.description ?? "");
   const [petType, setPetType] = useState<PetType>(category?.petType ?? "all");
   const [active, setActive] = useState(category?.active ?? true);
+  const [displayOrder, setDisplayOrder] = useState(category?.order ?? 0);
   const [error, setError] = useState("");
 
   function handleSubmit(event: React.FormEvent) {
@@ -40,7 +42,14 @@ function CategoryFormFields({
       setError("Category name is required.");
       return;
     }
-    onSubmit({ name: name.trim(), description: description.trim(), petType, active });
+    onSubmit({
+      name: name.trim(),
+      slug: slug.trim(),
+      description: description.trim(),
+      petType,
+      active,
+      displayOrder,
+    });
   }
 
   return (
@@ -57,6 +66,15 @@ function CategoryFormFields({
           autoFocus
         />
       </FormField>
+      <FormField label="Slug" htmlFor="cat-slug" optional>
+        <input
+          id="cat-slug"
+          value={slug}
+          onChange={(event) => setSlug(event.target.value)}
+          placeholder="Generated from the name when blank"
+          className={ADMIN_INPUT_CLASS}
+        />
+      </FormField>
       <FormField label="Description" htmlFor="cat-description" optional>
         <textarea
           id="cat-description"
@@ -66,6 +84,21 @@ function CategoryFormFields({
           className={`${ADMIN_INPUT_CLASS} resize-none`}
         />
       </FormField>
+      {!category && (
+        <FormField label="Display order" htmlFor="cat-display-order">
+          <input
+            id="cat-display-order"
+            type="number"
+            min={0}
+            step={1}
+            value={displayOrder}
+            onChange={(event) =>
+              setDisplayOrder(Math.max(0, Number.parseInt(event.target.value, 10) || 0))
+            }
+            className={ADMIN_INPUT_CLASS}
+          />
+        </FormField>
+      )}
       <FormField label="Pet type" htmlFor="cat-pet-type">
         <select id="cat-pet-type" value={petType} onChange={(e) => setPetType(e.target.value as PetType)} className={ADMIN_INPUT_CLASS}>
           {PET_TYPES.map((t) => (

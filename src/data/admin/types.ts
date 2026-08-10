@@ -70,9 +70,18 @@ export type Category = {
   active: boolean;
   /** Derived at read time from the current product set — never stored. */
   productCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
-export type CategoryInput = { name: string; description: string; petType: PetType; active: boolean };
+export type CategoryInput = {
+  name: string;
+  slug: string;
+  description: string;
+  petType: PetType;
+  active: boolean;
+  displayOrder: number;
+};
 
 export type Customer = {
   id: number | string;
@@ -80,7 +89,7 @@ export type Customer = {
   name: string;
   email: string;
   phone: string;
-  status?: string;
+  status?: "active" | "disabled";
   address: string;
   joinedAt: string;
   lastLoginAt?: string | null;

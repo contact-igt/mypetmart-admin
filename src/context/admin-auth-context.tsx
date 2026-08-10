@@ -14,6 +14,7 @@ import {
   adminSignin,
   type SafeAdminUser,
 } from "@/lib/auth/admin-auth-api";
+import { ADMIN_SESSION_EXPIRED_EVENT } from "@/lib/api/admin-api-client";
 
 type AdminAuthContextType = {
   user: SafeAdminUser | null;
@@ -25,26 +26,26 @@ type AdminAuthContextType = {
 
 const AdminAuthContext = createContext<AdminAuthContextType | undefined>(undefined);
 
-let refreshPromise: Promise<string> | null = null;
-
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SafeAdminUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
+    const handleExpiredSession = () => {
+      if (active) {
+        setUser(null);
+        setIsLoading(false);
+      }
+    };
+    window.addEventListener(ADMIN_SESSION_EXPIRED_EVENT, handleExpiredSession);
+
     const restoreSession = async () => {
       try {
-        if (!refreshPromise) {
-          refreshPromise = adminRefresh();
-        }
-        const token = await refreshPromise;
-        refreshPromise = null;
-
-        const profile = await adminGetMe(token);
+        await adminRefresh();
+        const profile = await adminGetMe();
         if (active) setUser(profile);
       } catch {
-        refreshPromise = null;
         if (active) setUser(null);
       } finally {
         if (active) setIsLoading(false);
@@ -54,6 +55,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     void restoreSession();
     return () => {
       active = false;
+      window.removeEventListener(ADMIN_SESSION_EXPIRED_EVENT, handleExpiredSession);
     };
   }, []);
 

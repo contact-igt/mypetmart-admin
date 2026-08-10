@@ -41,7 +41,7 @@ export function CustomersListView() {
     {
       key: "status",
       header: "Status",
-      render: (c) => <StatusBadge status={c.status === "disabled" ? "cancelled" : "delivered"} />,
+      render: (c) => <StatusBadge status={c.status ?? "active"} />,
     },
     { key: "joinedAt", header: "Joined", render: (c) => formatDate(c.joinedAt) },
   ];

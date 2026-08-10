@@ -1,7 +1,5 @@
-import { getAdminAccessToken } from "@/lib/auth/admin-auth-api";
 import type { Customer } from "@/data/admin/types";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000/api/v1";
+import { adminApiRequest } from "@/lib/api/admin-api-client";
 
 export type ListCustomersParams = {
   search?: string;
@@ -22,7 +20,7 @@ type BackendCustomerJSON = {
   name: string;
   email: string;
   phone: string | null;
-  status: string;
+  status: "active" | "disabled";
   createdAt: string;
   lastLoginAt: string | null;
   addresses?: Array<{
@@ -41,77 +39,56 @@ type BackendCustomerJSON = {
 
 function formatAddress(addresses?: BackendCustomerJSON["addresses"]): string {
   if (!addresses || addresses.length === 0) return "No saved addresses";
-  const def = addresses.find((a) => a.isDefault) || addresses[0];
-  const parts = [def.addressLine1, def.addressLine2, def.city, def.state, def.postalCode].filter(Boolean);
-  return parts.join(", ");
+  const defaultAddress = addresses.find((address) => address.isDefault) ?? addresses[0];
+  return [
+    defaultAddress.addressLine1,
+    defaultAddress.addressLine2,
+    defaultAddress.city,
+    defaultAddress.state,
+    defaultAddress.postalCode,
+  ]
+    .filter(Boolean)
+    .join(", ");
 }
 
-export async function fetchAdminCustomers(params?: ListCustomersParams): Promise<ListCustomersResult> {
-  const token = getAdminAccessToken();
-  if (!token) {
-    throw new Error("Authentication required.");
-  }
-
+export async function fetchAdminCustomers(
+  params?: ListCustomersParams,
+): Promise<ListCustomersResult> {
   const queryParams = new URLSearchParams();
   if (params?.page) queryParams.set("page", String(params.page));
   if (params?.pageSize) queryParams.set("limit", String(params.pageSize));
   if (params?.search?.trim()) queryParams.set("search", params.search.trim());
 
-  const response = await fetch(`${API_BASE}/admin/customers?${queryParams.toString()}`, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    credentials: "include",
-  });
-
-  const payload = await response.json();
-  if (!response.ok || !payload.success) {
-    throw new Error(payload?.error?.message || "Failed to fetch customers.");
-  }
-
-  const items: Customer[] = payload.data.items.map((item: BackendCustomerJSON) => ({
-    id: item.id,
-    referenceCode: item.referenceCode,
-    name: item.name,
-    email: item.email,
-    phone: item.phone ?? "N/A",
-    status: item.status,
-    address: "—",
-    joinedAt: item.createdAt,
-    lastLoginAt: item.lastLoginAt,
-  }));
+  const data = await adminApiRequest<{
+    items: BackendCustomerJSON[];
+    pagination: { totalItems: number; page: number; limit: number };
+  }>(`/admin/customers?${queryParams.toString()}`);
 
   return {
-    items,
-    total: payload.data.pagination.totalItems,
-    page: payload.data.pagination.page,
-    pageSize: payload.data.pagination.limit,
+    items: data.items.map((item) => ({
+      id: item.id,
+      referenceCode: item.referenceCode,
+      name: item.name,
+      email: item.email,
+      phone: item.phone ?? "N/A",
+      status: item.status,
+      address: "—",
+      joinedAt: item.createdAt,
+      lastLoginAt: item.lastLoginAt,
+    })),
+    total: data.pagination.totalItems,
+    page: data.pagination.page,
+    pageSize: data.pagination.limit,
   };
 }
 
-export async function fetchAdminCustomerDetail(customerId: string | number): Promise<Customer> {
-  const token = getAdminAccessToken();
-  if (!token) {
-    throw new Error("Authentication required.");
-  }
+export async function fetchAdminCustomerDetail(
+  customerId: string | number,
+): Promise<Customer> {
+  const item = await adminApiRequest<BackendCustomerJSON>(
+    `/admin/customers/${customerId}`,
+  );
 
-  const response = await fetch(`${API_BASE}/admin/customers/${customerId}`, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    credentials: "include",
-  });
-
-  const payload = await response.json();
-  if (!response.ok || !payload.success) {
-    throw new Error(payload?.error?.message || "Customer not found.");
-  }
-
-  const item: BackendCustomerJSON = payload.data;
   return {
     id: item.id,
     referenceCode: item.referenceCode,
