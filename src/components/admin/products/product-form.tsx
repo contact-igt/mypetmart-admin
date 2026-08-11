@@ -1,619 +1,214 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { adminRepository } from "@/data/admin/mock-repository";
-import type { Category, PetType, Product, ProductImage, ProductInput, ProductStatus, ProductVariant } from "@/data/admin/types";
-import { ImagePlaceholder, type PlaceholderTone } from "@/components/image-placeholder";
+import { fetchAdminCategories } from "@/lib/api/admin-category-api";
+import type { Category } from "@/data/admin/types";
+import {
+  createAdminProduct,
+  describeAdminError,
+  duplicateAdminProduct,
+  firstValidationErrors,
+  getAdminProduct,
+  setAdminProductStatus,
+  updateAdminProduct,
+  uploadAdminProductImage,
+  type PendingProductImage,
+  type PetType,
+  type ProductDetail,
+  type ProductStatus,
+} from "@/lib/api/admin-product-api";
 import { FormField, ADMIN_INPUT_CLASS } from "../ui/form-field";
-import { LoadingState, ErrorState } from "../ui/empty-state";
 import { ConfirmDialog } from "../ui/confirm-dialog";
+import { ErrorState, LoadingState } from "../ui/empty-state";
 import { useToast } from "../ui/toast";
-import { ChevronDownIcon, CloseIcon, CopyIcon, PlusIcon, TrashIcon, UploadIcon } from "@/components/icons";
-
-const TONES: PlaceholderTone[] = ["peach", "orange", "mint", "terracotta", "brown", "yellow", "cream"];
-const STATUSES: ProductStatus[] = ["active", "draft", "archived"];
-const PET_TYPES: { value: PetType; label: string }[] = [
-  { value: "dog", label: "Dogs" },
-  { value: "cat", label: "Cats" },
-  { value: "all", label: "Works for all pets" },
-];
-const MAX_IMAGES = 6;
-
-function slugPreview(name: string): string {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
+import { ProductImageManager } from "./product-image-manager";
+import { VariantManager, blankVariant, variantToInput, type VariantDraft } from "./variant-manager";
+import { CloseIcon, CopyIcon } from "@/components/icons";
 
 type FormState = {
-  name: string;
-  sku: string;
-  description: string;
-  categoryId: string;
-  petType: PetType;
-  tags: string[];
-  featured: boolean;
-  status: ProductStatus;
-  price: string;
-  originalPrice: string;
-  stock: string;
-  images: ProductImage[];
-  variants: ProductVariant[];
-  metaTitle: string;
-  metaDescription: string;
+  productType: "simple" | "variant";
+  name: string; slug: string; sku: string; description: string; categoryId: string;
+  petType: PetType; status: ProductStatus; featured: boolean;
+  price: string; compareAtPrice: string; stock: string;
+  weightGrams: string; lengthCm: string; widthCm: string; heightCm: string;
+  tags: string[]; metaTitle: string; metaDescription: string;
 };
 
 const EMPTY_FORM: FormState = {
-  name: "",
-  sku: "",
-  description: "",
-  categoryId: "",
-  petType: "all",
-  tags: [],
-  featured: false,
-  status: "draft",
-  price: "",
-  originalPrice: "",
-  stock: "0",
-  images: [],
-  variants: [],
-  metaTitle: "",
-  metaDescription: "",
+  productType: "simple", name: "", slug: "", sku: "", description: "", categoryId: "",
+  petType: "all", status: "draft", featured: false, price: "", compareAtPrice: "", stock: "0",
+  weightGrams: "", lengthCm: "", widthCm: "", heightCm: "", tags: [], metaTitle: "", metaDescription: "",
 };
 
-function toFormState(product: Product): FormState {
+function fromProduct(product: ProductDetail): FormState {
   return {
-    name: product.name,
-    sku: product.sku,
-    description: product.description,
-    categoryId: product.categoryId,
-    petType: product.petType,
-    tags: product.tags,
-    featured: product.featured,
-    status: product.status,
-    price: String(product.price),
-    originalPrice: product.originalPrice ? String(product.originalPrice) : "",
-    stock: String(product.stock),
-    images: product.images,
-    variants: product.variants,
-    metaTitle: product.metaTitle ?? "",
-    metaDescription: product.metaDescription ?? "",
+    productType: product.hasVariants ? "variant" : "simple", name: product.name, slug: product.slug,
+    sku: product.sku, description: product.description, categoryId: String(product.categoryId), petType: product.petType,
+    status: product.status, featured: product.featured, price: product.price, compareAtPrice: product.compareAtPrice ?? "",
+    stock: String(product.stock), weightGrams: product.weightGrams == null ? "" : String(product.weightGrams),
+    lengthCm: product.lengthCm ?? "", widthCm: product.widthCm ?? "", heightCm: product.heightCm ?? "",
+    tags: product.tags, metaTitle: product.metaTitle ?? "", metaDescription: product.metaDescription ?? "",
   };
 }
+
+const nullableDecimal = (value: string) => value.trim() || null;
+const nullableInteger = (value: string) => value.trim() ? Number(value) : null;
 
 export function ProductForm({ productId }: { productId?: string }) {
   const router = useRouter();
   const { showToast } = useToast();
-  const isEditing = Boolean(productId);
-
-  const [categories, setCategories] = useState<Category[]>([]);
+  const numericProductId = productId ? Number(productId) : undefined;
+  const isEditing = numericProductId !== undefined;
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [initialSnapshot, setInitialSnapshot] = useState<string>(JSON.stringify(EMPTY_FORM));
-  const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
+  const [product, setProduct] = useState<ProductDetail | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [variantDrafts, setVariantDrafts] = useState<VariantDraft[]>([]);
+  const [pendingImages, setPendingImages] = useState<PendingProductImage[]>([]);
+  const [tagDraft, setTagDraft] = useState("");
   const [loading, setLoading] = useState(isEditing);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
-  const [tagDraft, setTagDraft] = useState("");
+  const [dirty, setDirty] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [generalError, setGeneralError] = useState("");
+
+  const loadProduct = useCallback(async () => {
+    if (!numericProductId) return;
+    const next = await getAdminProduct(numericProductId);
+    setProduct(next); setForm(fromProduct(next));
+  }, [numericProductId]);
+
+  const refreshRelatedData = useCallback(async () => {
+    if (!numericProductId) return;
+    setProduct(await getAdminProduct(numericProductId));
+  }, [numericProductId]);
 
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const [cats, product] = await Promise.all([
-          adminRepository.listCategories(),
-          productId ? adminRepository.getProduct(productId) : Promise.resolve(null),
-        ]);
-        if (cancelled) return;
-        setCategories(cats);
-        if (productId) {
-          if (!product) {
-            setLoadError("Product not found.");
-          } else {
-            const next = toFormState(product);
-            setForm(next);
-            setInitialSnapshot(JSON.stringify(next));
-          }
-        } else if (cats[0]) {
-          setForm((prev) => {
-            const next = { ...prev, categoryId: cats[0].id };
-            setInitialSnapshot(JSON.stringify(next));
-            return next;
-          });
-        }
-      } catch {
-        if (!cancelled) setLoadError("Could not load the product form.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [productId]);
+    let live = true;
+    Promise.all([fetchAdminCategories(), numericProductId ? getAdminProduct(numericProductId) : Promise.resolve(null)])
+      .then(([nextCategories, nextProduct]) => {
+        if (!live) return;
+        setCategories(nextCategories);
+        if (nextProduct) { setProduct(nextProduct); setForm(fromProduct(nextProduct)); }
+      })
+      .catch((cause) => live && setLoadError(describeAdminError(cause, "Could not load Product data.")))
+      .finally(() => live && setLoading(false));
+    return () => { live = false; };
+  }, [numericProductId]);
 
-  const isDirty = JSON.stringify(form) !== initialSnapshot;
-
-  useEffect(() => {
-    if (!isDirty) return;
-    function handleBeforeUnload(e: BeforeUnloadEvent) {
-      e.preventDefault();
-    }
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [isDirty]);
-
-  function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
-    setErrors((prev) => ({ ...prev, [key]: undefined }));
+  function update<K extends keyof FormState>(field: K, value: FormState[K]) {
+    setForm((current) => ({ ...current, [field]: value })); setDirty(true);
+    setErrors((current) => { const next = { ...current }; delete next[field]; return next; });
   }
 
   function addTag() {
-    const tag = tagDraft.trim().toLowerCase();
-    if (!tag || form.tags.includes(tag)) {
-      setTagDraft("");
-      return;
-    }
-    updateField("tags", [...form.tags, tag]);
+    const tag = tagDraft.trim().replace(/,$/, "");
+    if (tag && !form.tags.includes(tag)) update("tags", [...form.tags, tag]);
     setTagDraft("");
   }
 
-  function removeTag(tag: string) {
-    updateField("tags", form.tags.filter((t) => t !== tag));
-  }
-
-  function addImage() {
-    setForm((prev) => ({
-      ...prev,
-      images: [...prev.images, { id: `img-${Date.now()}`, label: "", tone: "peach", alt: "" }],
-    }));
-    setErrors((prev) => ({ ...prev, images: undefined }));
-  }
-
-  function updateImage(index: number, patch: Partial<ProductImage>) {
-    setForm((prev) => ({
-      ...prev,
-      images: prev.images.map((img, i) => (i === index ? { ...img, ...patch } : img)),
-    }));
-  }
-
-  function removeImage(index: number) {
-    setForm((prev) => ({ ...prev, images: prev.images.filter((_, i) => i !== index) }));
-  }
-
-  function moveImage(index: number, direction: "up" | "down") {
-    const target = direction === "up" ? index - 1 : index + 1;
-    setForm((prev) => {
-      if (target < 0 || target >= prev.images.length) return prev;
-      const next = [...prev.images];
-      [next[index], next[target]] = [next[target], next[index]];
-      return { ...prev, images: next };
-    });
-  }
-
-  function setPrimaryImage(index: number) {
-    setForm((prev) => {
-      if (index === 0) return prev;
-      const next = [...prev.images];
-      const [chosen] = next.splice(index, 1);
-      next.unshift(chosen);
-      return { ...prev, images: next };
-    });
-  }
-
-  function updateVariant(index: number, patch: Partial<ProductVariant>) {
-    setForm((prev) => ({
-      ...prev,
-      variants: prev.variants.map((v, i) => (i === index ? { ...v, ...patch } : v)),
-    }));
-  }
-
-  function addVariant() {
-    setForm((prev) => ({
-      ...prev,
-      variants: [
-        ...prev.variants,
-        { id: `v-${Date.now()}`, label: "", sku: "", price: Number(prev.price) || 0, stock: 0 },
-      ],
-    }));
-  }
-
-  function removeVariant(index: number) {
-    setForm((prev) => ({ ...prev, variants: prev.variants.filter((_, i) => i !== index) }));
-  }
-
-  function validate(): boolean {
-    const next: Partial<Record<keyof FormState, string>> = {};
+  function validate(): Record<string, string> {
+    const next: Record<string, string> = {};
     if (!form.name.trim()) next.name = "Product name is required.";
     if (!form.sku.trim()) next.sku = "SKU is required.";
-    if (!form.description.trim()) next.description = "A short description is required.";
-    if (!form.categoryId) next.categoryId = "Choose a category.";
-    const price = Number(form.price);
-    if (!form.price || Number.isNaN(price) || price <= 0) next.price = "Enter a price greater than 0.";
-    const stock = Number(form.stock);
-    if (form.stock === "" || Number.isNaN(stock) || stock < 0) next.stock = "Enter a stock quantity of 0 or more.";
-    if (form.images.length === 0) {
-      next.images = "Add at least one product image.";
-    } else if (form.images.some((img) => !img.label.trim() || !img.alt.trim())) {
-      next.images = "Every image needs a description and alt text.";
+    if (!form.description.trim()) next.description = "Description is required.";
+    if (!form.categoryId) next.categoryId = "Select a real category.";
+    if (form.productType === "simple") {
+      if (!form.price.trim() || Number(form.price) < 0) next.price = "Enter a valid price.";
+      if (!Number.isInteger(Number(form.stock)) || Number(form.stock) < 0) next.stock = "Enter a non-negative whole number.";
     }
-    setErrors(next);
-    return Object.keys(next).length === 0;
+    if (form.productType === "variant" && !isEditing) {
+      variantDrafts.forEach((variant, index) => {
+        if (!variant.name.trim() || !variant.sku.trim() || !variant.price.trim()) next.variants = `Complete Variant ${index + 1} name, SKU, and price.`;
+      });
+    }
+    if (pendingImages.some((image) => !image.alt.trim())) next.images = "Alt text is required for every selected image.";
+    return next;
   }
 
-  async function save(status: ProductStatus) {
-    if (!validate()) {
-      showToast("Fix the highlighted fields before saving.", "error");
-      return;
-    }
-    setSaving(true);
-    const input: ProductInput = {
-      name: form.name.trim(),
-      sku: form.sku.trim(),
-      description: form.description.trim(),
-      categoryId: form.categoryId,
-      petType: form.petType,
-      tags: form.tags,
-      featured: form.featured,
-      status,
-      price: Number(form.price),
-      originalPrice: form.originalPrice ? Number(form.originalPrice) : undefined,
-      stock: Number(form.stock),
-      images: form.images,
-      variants: form.variants,
-      metaTitle: form.metaTitle.trim() || undefined,
-      metaDescription: form.metaDescription.trim() || undefined,
+  function payload() {
+    return {
+      categoryId: Number(form.categoryId), name: form.name.trim(), slug: form.slug.trim() || undefined,
+      sku: form.sku.trim(), description: form.description.trim(), petType: form.petType,
+      ...(form.productType === "simple" ? { price: form.price, compareAtPrice: nullableDecimal(form.compareAtPrice), stock: Number(form.stock) } : {}),
+      featured: form.featured, tags: form.tags, metaTitle: nullableDecimal(form.metaTitle), metaDescription: nullableDecimal(form.metaDescription),
+      weightGrams: nullableInteger(form.weightGrams), lengthCm: nullableDecimal(form.lengthCm), widthCm: nullableDecimal(form.widthCm), heightCm: nullableDecimal(form.heightCm),
     };
+  }
 
+  async function save(requestedStatus = form.status) {
+    const localErrors = validate();
+    if (Object.keys(localErrors).length) { setErrors(localErrors); setGeneralError("Review the highlighted fields before saving."); return; }
+    setSaving(true); setErrors({}); setGeneralError("");
     try {
-      if (isEditing && productId) {
-        await adminRepository.updateProduct(productId, input);
-        showToast("Product updated.");
+      if (numericProductId && product) {
+        await updateAdminProduct(numericProductId, payload());
+        if (requestedStatus !== product.status) {
+          try { await setAdminProductStatus(numericProductId, requestedStatus); }
+          catch (cause) {
+            await loadProduct(); setDirty(false);
+            setGeneralError(`Product fields were saved, but the status change failed: ${describeAdminError(cause, "Status rejected.")}`);
+            showToast("Product fields saved; status change was rejected.", "error"); return;
+          }
+        }
+        await loadProduct(); setDirty(false); showToast("Product saved to the production catalog.");
       } else {
-        await adminRepository.createProduct(input);
-        showToast(status === "draft" ? "Saved as draft." : "Product published.");
+        const created = await createAdminProduct({ ...payload(), status: requestedStatus, hasVariants: form.productType === "variant", variants: form.productType === "variant" ? variantDrafts.map(variantToInput) : undefined });
+        let failedUploads = 0;
+        for (const image of pendingImages) {
+          try { await uploadAdminProductImage(created.id, image.file, { alt: image.alt, isPrimary: image.isPrimary }); URL.revokeObjectURL(image.previewUrl); }
+          catch (cause) { failedUploads += 1; showToast(`Product created, but “${image.file.name}” was not attached: ${describeAdminError(cause, "upload failed")}`, "error"); }
+        }
+        if (failedUploads) {
+          showToast(`Product created. ${failedUploads} image upload${failedUploads === 1 ? "" : "s"} need retry from Edit.`, "error");
+          router.push(`/admin/products/${created.id}/edit`);
+        } else {
+          showToast(requestedStatus === "active" ? "Product created and published." : "Product saved as draft.");
+          router.push("/admin/products");
+        }
       }
-      setInitialSnapshot(JSON.stringify(form));
-      router.push("/admin/products");
-    } catch {
-      showToast("Could not save the product. Try again.", "error");
-    } finally {
-      setSaving(false);
-    }
+    } catch (cause) {
+      setErrors(firstValidationErrors(cause));
+      setGeneralError(describeAdminError(cause, "Could not save the Product."));
+      showToast(describeAdminError(cause, "Could not save the Product."), "error");
+    } finally { setSaving(false); }
   }
 
-  function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    save(form.status);
-  }
-
-  function handleCancel() {
-    if (isDirty) {
-      setDiscardOpen(true);
-    } else {
-      router.push("/admin/products");
-    }
-  }
-
-  async function handleDuplicate() {
-    if (!productId) return;
+  async function duplicate() {
+    if (!numericProductId) return;
     setDuplicating(true);
-    try {
-      const copy = await adminRepository.duplicateProduct(productId);
-      showToast(`Duplicated as "${copy.name}".`);
-      router.push(`/admin/products/${copy.id}/edit`);
-    } catch {
-      showToast("Could not duplicate the product.", "error");
-    } finally {
-      setDuplicating(false);
-    }
+    try { const copy = await duplicateAdminProduct(numericProductId); showToast(`Duplicated as “${copy.name}”.`); router.push(`/admin/products/${copy.id}/edit`); }
+    catch (cause) { showToast(describeAdminError(cause, "Could not duplicate Product."), "error"); }
+    finally { setDuplicating(false); }
   }
 
-  if (loading) return <LoadingState label="Loading product…" />;
-  if (loadError) return <ErrorState message={loadError} />;
+  const slugPreview = useMemo(() => form.slug.trim() || form.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "product-slug", [form.slug, form.name]);
+  if (loading) return <LoadingState label="Loading production Product…" />;
+  if (loadError) return <ErrorState message={loadError} onRetry={() => window.location.reload()} />;
 
-  const previewTitle = form.metaTitle.trim() || form.name || "Product name";
-  const previewDescription = form.metaDescription.trim() || form.description || "Product description appears here.";
-  const previewSlug = slugPreview(form.name) || "product-slug";
-
-  return (
-    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-6 pb-24 lg:flex-row lg:items-start">
-      <div className="flex flex-1 flex-col gap-5">
-        <div className="rounded-xl border border-border-subtle bg-white p-5">
-          <p className="mb-4 text-sm font-semibold text-text-primary">Basic information</p>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <FormField label="Product name" htmlFor="p-name" error={errors.name}>
-                <input id="p-name" value={form.name} onChange={(e) => updateField("name", e.target.value)} className={ADMIN_INPUT_CLASS} />
-              </FormField>
-            </div>
-
-            <FormField label="SKU" htmlFor="p-sku" error={errors.sku}>
-              <input id="p-sku" value={form.sku} onChange={(e) => updateField("sku", e.target.value)} className={ADMIN_INPUT_CLASS} />
-            </FormField>
-
-            <FormField label="Status" htmlFor="p-status" hint="Archived hides the product without deleting it.">
-              <select id="p-status" value={form.status} onChange={(e) => updateField("status", e.target.value as ProductStatus)} className={ADMIN_INPUT_CLASS}>
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s[0].toUpperCase() + s.slice(1)}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-
-            <div className="sm:col-span-2">
-              <FormField label="Description" htmlFor="p-desc" error={errors.description}>
-                <textarea id="p-desc" rows={3} value={form.description} onChange={(e) => updateField("description", e.target.value)} className={`${ADMIN_INPUT_CLASS} resize-none`} />
-              </FormField>
-            </div>
-
-            <FormField label="Category" htmlFor="p-category" error={errors.categoryId}>
-              <select id="p-category" value={form.categoryId} onChange={(e) => updateField("categoryId", e.target.value)} className={ADMIN_INPUT_CLASS}>
-                <option value="">Select a category</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-
-            <FormField label="Pet type" htmlFor="p-pet-type">
-              <select id="p-pet-type" value={form.petType} onChange={(e) => updateField("petType", e.target.value as PetType)} className={ADMIN_INPUT_CLASS}>
-                {PET_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-
-            <div className="sm:col-span-2">
-              <FormField label="Tags" htmlFor="p-tags" optional hint="Press Enter or comma to add a tag.">
-                <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border-subtle bg-white p-2">
-                  {form.tags.map((tag) => (
-                    <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-cream-bg px-2 py-1 text-xs font-medium text-text-primary">
-                      {tag}
-                      <button type="button" onClick={() => removeTag(tag)} aria-label={`Remove tag ${tag}`} className="text-text-primary/50 hover:text-terracotta">
-                        <CloseIcon width={9} height={9} />
-                      </button>
-                    </span>
-                  ))}
-                  <input
-                    id="p-tags"
-                    value={tagDraft}
-                    onChange={(e) => {
-                      if (e.target.value.endsWith(",")) {
-                        setTagDraft(e.target.value.slice(0, -1));
-                        addTag();
-                      } else {
-                        setTagDraft(e.target.value);
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addTag();
-                      }
-                    }}
-                    onBlur={addTag}
-                    placeholder={form.tags.length === 0 ? "e.g. bestseller, grooming" : "Add another…"}
-                    className="min-w-[8rem] flex-1 border-none bg-transparent text-sm outline-none"
-                  />
-                </div>
-              </FormField>
-            </div>
-
-            <label className="flex items-center gap-2 text-sm text-text-primary sm:col-span-2">
-              <input type="checkbox" checked={form.featured} onChange={(e) => updateField("featured", e.target.checked)} className="h-4 w-4 accent-primary-orange" />
-              Featured — highlight this product in featured placements
-            </label>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-border-subtle bg-white p-5">
-          <p className="mb-4 text-sm font-semibold text-text-primary">Pricing &amp; inventory</p>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <FormField label="Price (₹)" htmlFor="p-price" error={errors.price}>
-              <input id="p-price" type="number" min={0} value={form.price} onChange={(e) => updateField("price", e.target.value)} className={ADMIN_INPUT_CLASS} />
-            </FormField>
-            <FormField label="Compare-at price (₹)" htmlFor="p-original-price" optional hint="Shown struck through when higher than price.">
-              <input id="p-original-price" type="number" min={0} value={form.originalPrice} onChange={(e) => updateField("originalPrice", e.target.value)} className={ADMIN_INPUT_CLASS} />
-            </FormField>
-            <FormField label="Stock" htmlFor="p-stock" error={errors.stock}>
-              <input id="p-stock" type="number" min={0} value={form.stock} onChange={(e) => updateField("stock", e.target.value)} className={ADMIN_INPUT_CLASS} />
-            </FormField>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-border-subtle bg-white p-5">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-sm font-semibold text-text-primary">Variants</p>
-            <button type="button" onClick={addVariant} className="inline-flex items-center gap-1 text-xs font-semibold text-primary-orange hover:underline">
-              <PlusIcon width={12} height={12} /> Add variant
-            </button>
-          </div>
-          {form.variants.length === 0 && <p className="text-sm text-text-primary/50">No variants — this product sells as a single item.</p>}
-          <div className="flex flex-col gap-2">
-            {form.variants.map((variant, index) => (
-              <div key={variant.id} className="grid grid-cols-[1fr_1fr_5.5rem_5.5rem_auto] items-center gap-2">
-                <input aria-label="Variant label" placeholder="Label (e.g. Small)" value={variant.label} onChange={(e) => updateVariant(index, { label: e.target.value })} className={ADMIN_INPUT_CLASS} />
-                <input aria-label="Variant SKU" placeholder="SKU" value={variant.sku} onChange={(e) => updateVariant(index, { sku: e.target.value })} className={ADMIN_INPUT_CLASS} />
-                <input aria-label="Variant price" type="number" min={0} value={variant.price} onChange={(e) => updateVariant(index, { price: Number(e.target.value) })} className={ADMIN_INPUT_CLASS} />
-                <input aria-label="Variant stock" type="number" min={0} value={variant.stock} onChange={(e) => updateVariant(index, { stock: Number(e.target.value) })} className={ADMIN_INPUT_CLASS} />
-                <button type="button" onClick={() => removeVariant(index)} aria-label="Remove variant" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-text-primary/50 hover:bg-cream-bg hover:text-terracotta">
-                  <TrashIcon width={15} height={15} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-border-subtle bg-white p-5">
-          <p className="mb-1 text-sm font-semibold text-text-primary">Search engine preview</p>
-          <p className="mb-4 text-xs text-text-primary/55">Optional — falls back to the product name and description when left blank.</p>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField label="Meta title" htmlFor="p-meta-title" optional>
-              <input id="p-meta-title" value={form.metaTitle} onChange={(e) => updateField("metaTitle", e.target.value)} className={ADMIN_INPUT_CLASS} maxLength={70} />
-            </FormField>
-            <FormField label="Meta description" htmlFor="p-meta-desc" optional>
-              <input id="p-meta-desc" value={form.metaDescription} onChange={(e) => updateField("metaDescription", e.target.value)} className={ADMIN_INPUT_CLASS} maxLength={160} />
-            </FormField>
-          </div>
-          <div className="mt-4 rounded-lg border border-border-subtle bg-cream-bg/40 p-3">
-            <p className="truncate text-sm font-medium text-primary-orange">{previewTitle}</p>
-            <p className="truncate text-xs text-text-primary/50">mypetmart.com/product/{previewSlug}</p>
-            <p className="mt-0.5 line-clamp-2 text-xs text-text-primary/70">{previewDescription}</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="w-full shrink-0 lg:w-80">
-        <div className="rounded-xl border border-border-subtle bg-white p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm font-semibold text-text-primary">Product images</p>
-            <button
-              type="button"
-              onClick={addImage}
-              disabled={form.images.length >= MAX_IMAGES}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-primary-orange hover:underline disabled:opacity-40"
-            >
-              <PlusIcon width={12} height={12} /> Add image
-            </button>
-          </div>
-          <div className="flex items-center gap-2 rounded-lg border border-dashed border-border-subtle p-3 text-center">
-            <UploadIcon width={18} height={18} className="shrink-0 text-text-primary/40" />
-            <p className="text-left text-xs text-text-primary/55">Storage integration required — real uploads need Cloudflare R2 (M3). Each slot below is a labelled placeholder.</p>
-          </div>
-          {errors.images && (
-            <p role="alert" className="mt-2 text-xs font-medium text-terracotta">
-              {errors.images}
-            </p>
-          )}
-
-          {form.images.length === 0 ? (
-            <p className="mt-4 text-sm text-text-primary/50">No images yet — add at least one.</p>
-          ) : (
-            <div className="mt-4 flex flex-col gap-3">
-              {form.images.map((image, index) => (
-                <div key={image.id} className="rounded-lg border border-border-subtle p-3">
-                  <div className="flex gap-3">
-                    <ImagePlaceholder label={image.label || "Untitled image"} tone={image.tone} className="h-16 w-16 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <div className="mb-1.5 flex items-center justify-between gap-2">
-                        <span className={`text-[11px] font-semibold ${index === 0 ? "text-primary-orange" : "text-text-primary/45"}`}>
-                          {index === 0 ? "Primary image" : `Image ${index + 1}`}
-                        </span>
-                        <div className="flex items-center gap-0.5">
-                          <button type="button" onClick={() => moveImage(index, "up")} disabled={index === 0} aria-label="Move image up" className="rounded p-1 text-text-primary/45 hover:bg-cream-bg hover:text-text-primary disabled:opacity-25">
-                            <ChevronDownIcon width={13} height={13} className="rotate-180" />
-                          </button>
-                          <button type="button" onClick={() => moveImage(index, "down")} disabled={index === form.images.length - 1} aria-label="Move image down" className="rounded p-1 text-text-primary/45 hover:bg-cream-bg hover:text-text-primary disabled:opacity-25">
-                            <ChevronDownIcon width={13} height={13} />
-                          </button>
-                          <button type="button" onClick={() => removeImage(index)} aria-label="Remove image" className="rounded p-1 text-text-primary/45 hover:bg-terracotta/10 hover:text-terracotta">
-                            <TrashIcon width={13} height={13} />
-                          </button>
-                        </div>
-                      </div>
-                      <input
-                        aria-label="Image description"
-                        placeholder="Describe the photo"
-                        value={image.label}
-                        onChange={(e) => updateImage(index, { label: e.target.value })}
-                        className={`${ADMIN_INPUT_CLASS} mb-1.5 text-xs`}
-                      />
-                      <input
-                        aria-label="Image alt text"
-                        placeholder="Alt text"
-                        value={image.alt}
-                        onChange={(e) => updateImage(index, { alt: e.target.value })}
-                        className={`${ADMIN_INPUT_CLASS} mb-1.5 text-xs`}
-                      />
-                      <div className="flex items-center gap-2">
-                        <select value={image.tone} onChange={(e) => updateImage(index, { tone: e.target.value as PlaceholderTone })} className={`${ADMIN_INPUT_CLASS} flex-1 text-xs`}>
-                          {TONES.map((tone) => (
-                            <option key={tone} value={tone}>
-                              {tone[0].toUpperCase() + tone.slice(1)}
-                            </option>
-                          ))}
-                        </select>
-                        {index !== 0 && (
-                          <button type="button" onClick={() => setPrimaryImage(index)} className="shrink-0 whitespace-nowrap text-xs font-semibold text-primary-orange hover:underline">
-                            Set primary
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {isEditing && (
-          <button
-            type="button"
-            onClick={handleDuplicate}
-            disabled={duplicating}
-            className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-border-subtle bg-white px-4 py-2 text-sm font-semibold text-text-primary transition-colors duration-150 ease-out hover:bg-cream-bg disabled:opacity-60"
-          >
-            <CopyIcon width={14} height={14} /> {duplicating ? "Duplicating…" : "Duplicate as new draft"}
-          </button>
-        )}
-      </div>
-
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border-subtle bg-white/95 px-4 py-3 backdrop-blur lg:left-64">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
-          <p className="hidden text-xs text-text-primary/50 sm:block">{isDirty ? "You have unsaved changes." : "All changes saved."}</p>
-          <div className="flex flex-1 items-center justify-end gap-2">
-            <button type="button" onClick={handleCancel} className="rounded-lg border border-border-subtle px-4 py-2 text-sm font-medium text-text-primary transition-colors duration-150 ease-out hover:bg-cream-bg">
-              Cancel
-            </button>
-            {form.status === "draft" ? (
-              <>
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => save("draft")}
-                  className="rounded-lg border border-border-subtle px-4 py-2 text-sm font-semibold text-text-primary transition-colors duration-150 ease-out hover:bg-cream-bg disabled:opacity-60"
-                >
-                  {saving ? "Saving…" : "Save as draft"}
-                </button>
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => save("active")}
-                  className="rounded-lg bg-primary-orange px-4 py-2 text-sm font-semibold text-white transition-colors duration-150 ease-out hover:opacity-90 disabled:opacity-60"
-                >
-                  {saving ? "Publishing…" : "Publish"}
-                </button>
-              </>
-            ) : (
-              <button type="submit" disabled={saving} className="rounded-lg bg-primary-orange px-4 py-2 text-sm font-semibold text-white transition-colors duration-150 ease-out hover:opacity-90 disabled:opacity-60">
-                {saving ? "Saving…" : "Save changes"}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <ConfirmDialog
-        open={discardOpen}
-        onClose={() => setDiscardOpen(false)}
-        onConfirm={() => router.push("/admin/products")}
-        title="Discard unsaved changes?"
-        description="You have changes that haven't been saved. Leaving now will discard them."
-        confirmLabel="Discard"
-        destructive
-      />
-    </form>
-  );
+  return <form onSubmit={(event) => { event.preventDefault(); void save(); }} noValidate className="flex flex-col gap-5 pb-24" aria-busy={saving}>
+    {generalError && <div role="alert" className="rounded-lg border border-terracotta/30 bg-terracotta/5 p-3 text-sm font-medium text-terracotta">{generalError}</div>}
+    <section className="rounded-xl border border-border-subtle bg-white p-4 sm:p-5"><h2 className="mb-4 text-sm font-semibold">Product type</h2>{isEditing ? <div className="rounded-lg bg-cream-bg/60 p-3"><strong>{form.productType === "variant" ? "Variant Product" : "Simple Product"}</strong><p className="mt-1 text-xs text-text-primary/55">Product type is immutable after creation.</p></div> : <div className="grid gap-3 sm:grid-cols-2">{([['simple','Simple Product','One price and inventory value.'],['variant','Variant Product','Price, stock, and optional shipping overrides per Variant.']] as const).map(([value,label,hint]) => <label key={value} className={`rounded-lg border p-4 ${form.productType === value ? "border-primary-orange bg-primary-orange/5" : "border-border-subtle"}`}><input type="radio" name="productType" value={value} checked={form.productType === value} onChange={() => { update("productType", value); if (value === "variant" && variantDrafts.length === 0) setVariantDrafts([blankVariant()]); }} className="mr-2" /><strong className="text-sm">{label}</strong><p className="ml-6 mt-1 text-xs text-text-primary/55">{hint}</p></label>)}</div>}</section>
+    <section className="rounded-xl border border-border-subtle bg-white p-4 sm:p-5"><h2 className="mb-4 text-sm font-semibold">Basic information</h2><div className="grid gap-4 sm:grid-cols-2">
+      <div className="sm:col-span-2"><FormField label="Product name" htmlFor="p-name" error={errors.name}><input id="p-name" value={form.name} onChange={(e) => update("name",e.target.value)} aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? "p-name-error" : undefined} className={ADMIN_INPUT_CLASS} /></FormField></div>
+      <FormField label="Slug" htmlFor="p-slug" optional hint="Leave blank on create to generate it. Existing slugs remain stable unless edited."><input id="p-slug" value={form.slug} onChange={(e) => update("slug",e.target.value)} className={ADMIN_INPUT_CLASS} /></FormField>
+      <FormField label="SKU" htmlFor="p-sku" error={errors.sku}><input id="p-sku" value={form.sku} onChange={(e) => update("sku",e.target.value)} aria-invalid={Boolean(errors.sku)} aria-describedby={errors.sku ? "p-sku-error" : undefined} className={ADMIN_INPUT_CLASS} /></FormField>
+      <div className="sm:col-span-2"><FormField label="Description" htmlFor="p-description" error={errors.description}><textarea id="p-description" rows={4} value={form.description} onChange={(e) => update("description",e.target.value)} aria-invalid={Boolean(errors.description)} aria-describedby={errors.description ? "p-description-error" : undefined} className={`${ADMIN_INPUT_CLASS} resize-y`} /></FormField></div>
+      <FormField label="Category" htmlFor="p-category" error={errors.categoryId}><select id="p-category" value={form.categoryId} onChange={(e) => update("categoryId",e.target.value)} aria-invalid={Boolean(errors.categoryId)} className={ADMIN_INPUT_CLASS}><option value="">Select category</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}{category.active ? "" : " (inactive)"} · {category.petType}</option>)}</select></FormField>
+      <FormField label="Pet compatibility" htmlFor="p-pet"><select id="p-pet" value={form.petType} onChange={(e) => update("petType",e.target.value as PetType)} className={ADMIN_INPUT_CLASS}><option value="dog">Dogs</option><option value="cat">Cats</option><option value="all">All pets</option></select></FormField>
+      <FormField label="Status" htmlFor="p-status" hint="Activation is validated for sellability and shipping readiness by the Backend."><select id="p-status" value={form.status} onChange={(e) => update("status",e.target.value as ProductStatus)} className={ADMIN_INPUT_CLASS}><option value="draft">Draft</option><option value="active">Active</option><option value="archived">Archived</option></select></FormField>
+      <label className="flex items-center gap-2 self-end pb-2 text-sm"><input type="checkbox" checked={form.featured} onChange={(e) => update("featured",e.target.checked)} /> Featured Product</label>
+      <div className="sm:col-span-2"><FormField label="Tags" htmlFor="p-tags" optional hint="Press Enter or comma to add."><div className="flex flex-wrap gap-1.5 rounded-lg border border-border-subtle p-2">{form.tags.map((tag) => <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-cream-bg px-2 py-1 text-xs">{tag}<button type="button" onClick={() => update("tags",form.tags.filter((item) => item!==tag))} aria-label={`Remove ${tag}`}><CloseIcon width={10} /></button></span>)}<input id="p-tags" value={tagDraft} onChange={(e) => { if (e.target.value.endsWith(",")) { setTagDraft(e.target.value.slice(0,-1)); addTag(); } else setTagDraft(e.target.value); }} onKeyDown={(e) => { if(e.key==="Enter"){e.preventDefault();addTag();} }} onBlur={addTag} className="min-w-32 flex-1 border-0 bg-transparent text-sm outline-none" /></div></FormField></div>
+    </div></section>
+    {form.productType === "simple" ? <section className="rounded-xl border border-border-subtle bg-white p-4 sm:p-5"><h2 className="mb-4 text-sm font-semibold">Pricing and inventory</h2><div className="grid gap-4 sm:grid-cols-3"><FormField label="Price (₹)" htmlFor="p-price" error={errors.price}><input id="p-price" type="number" min="0" step="0.01" value={form.price} onChange={(e) => update("price",e.target.value)} aria-invalid={Boolean(errors.price)} className={ADMIN_INPUT_CLASS} /></FormField><FormField label="Compare-at price (₹)" htmlFor="p-compare" optional><input id="p-compare" type="number" min="0" step="0.01" value={form.compareAtPrice} onChange={(e) => update("compareAtPrice",e.target.value)} className={ADMIN_INPUT_CLASS} /></FormField><FormField label="Stock" htmlFor="p-stock" error={errors.stock}><input id="p-stock" type="number" min="0" step="1" value={form.stock} onChange={(e) => update("stock",e.target.value)} className={ADMIN_INPUT_CLASS} /></FormField></div></section> : <VariantManager key={product ? `variants-${product.updatedAt}-${product.variants.map((variant) => variant.updatedAt).join("-")}` : "new-variants"} productId={numericProductId} variants={product?.variants} drafts={isEditing ? undefined : variantDrafts} onDraftsChange={(next) => { setVariantDrafts(next); setDirty(true); }} onChanged={refreshRelatedData} />}
+    <section className="rounded-xl border border-border-subtle bg-white p-4 sm:p-5"><h2 className="mb-1 text-sm font-semibold">Shipping defaults</h2><p className="mb-4 text-xs text-text-primary/50">Required before activation. Variants inherit these values when their override is blank.</p><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><FormField label="Weight (g)" htmlFor="p-weight" optional><input id="p-weight" type="number" min="1" step="1" value={form.weightGrams} onChange={(e) => update("weightGrams",e.target.value)} className={ADMIN_INPUT_CLASS} /></FormField>{([['lengthCm','Length (cm)'],['widthCm','Width (cm)'],['heightCm','Height (cm)']] as const).map(([field,label]) => <FormField key={field} label={label} htmlFor={`p-${field}`} optional><input id={`p-${field}`} type="number" min="0.01" step="0.01" value={form[field]} onChange={(e) => update(field,e.target.value)} className={ADMIN_INPUT_CLASS} /></FormField>)}</div></section>
+    <ProductImageManager key={product ? `images-${product.updatedAt}-${product.images.map((image) => `${image.id}-${image.sortOrder}-${image.alt}-${image.isPrimary}`).join("-")}` : "new-images"} productId={numericProductId} images={product?.images} pending={pendingImages} onPendingChange={(next) => { setPendingImages(next); setDirty(true); }} onChanged={refreshRelatedData} />{errors.images && <p role="alert" className="text-sm font-medium text-terracotta">{errors.images}</p>}
+    <section className="rounded-xl border border-border-subtle bg-white p-4 sm:p-5"><h2 className="mb-4 text-sm font-semibold">SEO</h2><div className="grid gap-4 sm:grid-cols-2"><FormField label="Meta title" htmlFor="p-meta-title" optional><input id="p-meta-title" maxLength={70} value={form.metaTitle} onChange={(e) => update("metaTitle",e.target.value)} className={ADMIN_INPUT_CLASS} /></FormField><FormField label="Meta description" htmlFor="p-meta-description" optional><textarea id="p-meta-description" maxLength={160} rows={2} value={form.metaDescription} onChange={(e) => update("metaDescription",e.target.value)} className={ADMIN_INPUT_CLASS} /></FormField></div><div className="mt-4 rounded-lg bg-cream-bg/60 p-3"><p className="truncate text-sm font-medium text-primary-orange">{form.metaTitle || form.name || "Product name"}</p><p className="truncate text-xs text-text-primary/50">mypetmart.com/product/{slugPreview}</p><p className="mt-1 line-clamp-2 text-xs text-text-primary/70">{form.metaDescription || form.description || "Product description"}</p></div></section>
+    {isEditing && <button type="button" onClick={duplicate} disabled={duplicating} className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border-subtle bg-white px-4 py-2 text-sm font-semibold disabled:opacity-50"><CopyIcon width={14} /> {duplicating ? "Duplicating…" : "Duplicate as new draft"}</button>}
+    <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border-subtle bg-white/95 px-4 py-3 backdrop-blur lg:left-64"><div className="mx-auto flex max-w-5xl items-center justify-between gap-3"><p className="hidden text-xs text-text-primary/50 sm:block">{dirty ? "You have unsaved Product fields." : "Product fields are saved."}</p><div className="ml-auto flex gap-2"><button type="button" onClick={() => dirty ? setDiscardOpen(true) : router.push("/admin/products")} className="rounded-lg border border-border-subtle px-4 py-2 text-sm">Cancel</button>{form.status === "draft" && <button type="button" disabled={saving} onClick={() => save("active")} className="rounded-lg border border-primary-orange px-4 py-2 text-sm font-semibold text-primary-orange disabled:opacity-50">Publish</button>}<button type="submit" disabled={saving} className="rounded-lg bg-primary-orange px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Saving…" : form.status === "draft" ? "Save draft" : "Save Product"}</button></div></div></div>
+    <ConfirmDialog open={discardOpen} onClose={() => setDiscardOpen(false)} onConfirm={() => router.push("/admin/products")} title="Discard unsaved Product fields?" description="Immediate Variant and image operations already completed will remain saved. Unsaved Product fields will be discarded." confirmLabel="Discard" />
+  </form>;
 }

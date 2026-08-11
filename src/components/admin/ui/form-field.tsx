@@ -21,9 +21,9 @@ export function FormField({
         {label} {optional && <span className="font-normal normal-case text-text-primary/45">(optional)</span>}
       </label>
       {children}
-      {hint && !error && <p className="mt-1 text-xs text-text-primary/50">{hint}</p>}
+      {hint && !error && <p id={`${htmlFor}-hint`} className="mt-1 text-xs text-text-primary/50">{hint}</p>}
       {error && (
-        <p role="alert" className="mt-1 text-xs font-medium text-terracotta">
+        <p id={`${htmlFor}-error`} role="alert" className="mt-1 text-xs font-medium text-terracotta">
           {error}
         </p>
       )}
