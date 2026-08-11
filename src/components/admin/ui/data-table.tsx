@@ -41,6 +41,7 @@ export function DataTable<T>({
   selectedIds,
   onSelectionChange,
   onRowClick,
+  tableClassName,
 }: {
   columns: Column<T>[];
   rows: T[];
@@ -51,6 +52,7 @@ export function DataTable<T>({
   selectedIds?: Set<string>;
   onSelectionChange?: (ids: Set<string>) => void;
   onRowClick?: (row: T) => void;
+  tableClassName?: string;
 }) {
   const selectable = Boolean(selectedIds && onSelectionChange);
   const allSelected = selectable && rows.length > 0 && rows.every((r) => selectedIds!.has(getRowId(r)));
@@ -74,17 +76,17 @@ export function DataTable<T>({
 
   return (
     <div className="overflow-x-auto rounded-xl border border-border-subtle bg-white">
-      <table className="w-full min-w-[640px] border-collapse text-sm">
+      <table className={`w-full min-w-[640px] border-collapse text-sm ${tableClassName ?? ""}`}>
         <thead>
           <tr className="border-b border-border-subtle bg-cream-bg/60 text-left text-xs font-semibold uppercase tracking-wide text-text-primary/60">
             {selectable && (
-              <th className="w-10 px-4 py-3">
+              <th className="w-12 px-4 py-3 text-center align-middle">
                 <input
                   type="checkbox"
                   checked={allSelected}
                   onChange={toggleAll}
                   aria-label="Select all rows"
-                  className="h-4 w-4"
+                  className="h-4 w-4 accent-primary-orange"
                 />
               </th>
             )}
@@ -112,19 +114,19 @@ export function DataTable<T>({
             return (
               <tr
                 key={id}
-                className={`border-b border-border-subtle/70 last:border-b-0 ${
-                  onRowClick ? "cursor-pointer hover:bg-cream-bg/50" : ""
+                className={`border-b border-border-subtle/70 transition-colors last:border-b-0 hover:bg-cream-bg/30 ${
+                  onRowClick ? "cursor-pointer" : ""
                 }`}
                 onClick={() => onRowClick?.(row)}
               >
                 {selectable && (
-                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                  <td className="w-12 px-4 py-3 text-center align-middle" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={selectedIds!.has(id)}
                       onChange={() => toggleRow(id)}
                       aria-label={`Select row ${id}`}
-                      className="h-4 w-4"
+                      className="h-4 w-4 accent-primary-orange"
                     />
                   </td>
                 )}

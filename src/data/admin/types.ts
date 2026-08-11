@@ -72,6 +72,7 @@ export type Category = {
   productCount?: number;
   createdAt?: string;
   updatedAt?: string;
+  deletedAt?: string | null;
 };
 
 export type CategoryInput = {

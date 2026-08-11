@@ -15,12 +15,30 @@ type BackendCategory = {
   productCount: number;
   createdAt: string;
   updatedAt: string;
+  deletedAt: string | null;
 };
+
+export type CategoryStatusFilter = "all" | "active" | "inactive" | "deleted";
 
 export type CategoryUpdateInput = Pick<
   CategoryInput,
-  "name" | "slug" | "description" | "petType"
+  "name" | "description" | "petType"
 >;
+
+export type CategoryCreateInput = Pick<
+  CategoryInput,
+  "name" | "slug" | "description" | "petType" | "active"
+>;
+
+// Mirrors backend/src/models/CategoryModels/category.validation.ts exactly.
+export function slugifyCategoryName(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/[\s_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
 function toCategory(category: BackendCategory): Category {
   return {
@@ -34,6 +52,7 @@ function toCategory(category: BackendCategory): Category {
     productCount: category.productCount,
     createdAt: category.createdAt,
     updatedAt: category.updatedAt,
+    deletedAt: category.deletedAt,
   };
 }
 
@@ -41,9 +60,16 @@ function categoryPath(categoryId: string): string {
   return `/admin/categories/${encodeURIComponent(categoryId)}`;
 }
 
-export async function fetchAdminCategories(): Promise<Category[]> {
+export async function fetchAdminCategories(
+  status: CategoryStatusFilter = "all",
+): Promise<Category[]> {
+  const params = new URLSearchParams({
+    status,
+    sort: "displayOrder",
+    order: "ASC",
+  });
   const categories = await adminApiRequest<BackendCategory[]>(
-    "/admin/categories?sort=displayOrder&order=ASC",
+    `/admin/categories?${params.toString()}`,
   );
   return categories.map(toCategory);
 }
@@ -54,7 +80,7 @@ export async function fetchAdminCategory(categoryId: string): Promise<Category> 
   );
 }
 
-export async function createAdminCategory(input: CategoryInput): Promise<Category> {
+export async function createAdminCategory(input: CategoryCreateInput): Promise<Category> {
   const category = await adminApiRequest<BackendCategory>("/admin/categories", {
     method: "POST",
     body: JSON.stringify({
@@ -63,7 +89,6 @@ export async function createAdminCategory(input: CategoryInput): Promise<Categor
       description: input.description || null,
       petType: input.petType,
       active: input.active,
-      displayOrder: input.displayOrder,
     }),
   });
   return toCategory(category);
@@ -77,7 +102,6 @@ export async function updateAdminCategory(
     method: "PATCH",
     body: JSON.stringify({
       name: input.name,
-      slug: input.slug || undefined,
       description: input.description || null,
       petType: input.petType,
     }),
@@ -118,4 +142,12 @@ export async function deleteAdminCategory(categoryId: string): Promise<void> {
   await adminApiRequest<{ deleted: true; id: number }>(categoryPath(categoryId), {
     method: "DELETE",
   });
+}
+
+export async function restoreAdminCategory(categoryId: string): Promise<Category> {
+  return toCategory(
+    await adminApiRequest<BackendCategory>(`${categoryPath(categoryId)}/restore`, {
+      method: "PATCH",
+    }),
+  );
 }

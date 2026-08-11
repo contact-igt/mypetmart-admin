@@ -1,6 +1,7 @@
 import { AdminApiError, adminApiRequest } from "@/lib/api/admin-api-client";
 
 export type ProductStatus = "active" | "draft" | "archived";
+export type ProductListStatus = ProductStatus | "deleted";
 export type PetType = "dog" | "cat" | "all";
 export type StockLevel = "in_stock" | "low_stock" | "out_of_stock";
 export type ProductSort = "created_at" | "price" | "name" | "stock";
@@ -58,6 +59,9 @@ export type ProductListItem = {
   primaryImage: ProductImage | null;
   createdAt: string;
   updatedAt: string;
+  deletedAt: string | null;
+  restorable: boolean;
+  restoreBlockedReason: string | null;
 };
 
 export type ProductDetail = ProductListItem & {
@@ -86,7 +90,6 @@ export type VariantInput = {
 export type ProductInput = {
   categoryId: number;
   name: string;
-  slug?: string;
   sku: string;
   description: string;
   petType: PetType;
@@ -102,6 +105,18 @@ export type ProductInput = {
   widthCm?: string | null;
   heightCm?: string | null;
 };
+
+// Mirrors backend/src/models/ProductModels/product.validation.ts exactly.
+export function slugifyProductName(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^\w-]+/g, "")
+    .replace(/--+/g, "-")
+    .replace(/^-+/, "")
+    .replace(/-+$/, "");
+}
 
 export type CreateProductInput = ProductInput & {
   status: ProductStatus;
@@ -148,7 +163,7 @@ export async function listAdminProducts(query: {
   pageSize?: number;
   search?: string;
   categoryId?: number;
-  status?: ProductStatus;
+  status?: ProductListStatus;
   petType?: PetType;
   stockLevel?: StockLevel;
   sort?: ProductSort;
@@ -192,6 +207,10 @@ export function setAdminProductStatus(productId: number | string, status: Produc
 
 export function deleteAdminProduct(productId: number | string): Promise<{ message: string }> {
   return adminApiRequest<{ message: string }>(productPath(productId), { method: "DELETE" });
+}
+
+export function restoreAdminProduct(productId: number | string): Promise<ProductDetail> {
+  return adminApiRequest<ProductDetail>(`${productPath(productId)}/restore`, { method: "PATCH" });
 }
 
 export function duplicateAdminProduct(productId: number | string): Promise<ProductDetail> {

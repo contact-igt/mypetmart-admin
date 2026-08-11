@@ -2,6 +2,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { AdminApiError } from "@/lib/api/admin-api-client";
 import {
   deleteAdminProductImage,
   describeAdminError,
@@ -102,7 +103,15 @@ export function ProductImageManager({ productId, images = [], pending, onPending
     if (!deleteTarget || !productId) return;
     setBusy(true);
     try { await deleteAdminProductImage(productId, deleteTarget.id); showToast("Image metadata and R2 object deleted."); setDeleteTarget(null); await onChanged?.(); }
-    catch (cause) { showToast(describeAdminError(cause, "Could not delete the image."), "error"); }
+    catch (cause) {
+      if (cause instanceof AdminApiError && cause.code === "R2_OPERATION_FAILED") {
+        setDeleteTarget(null);
+        await onChanged?.();
+        showToast("The image was removed from the catalog, but Cloudflare R2 cleanup is still pending.", "error");
+      } else {
+        showToast(describeAdminError(cause, "Could not delete the image."), "error");
+      }
+    }
     finally { setBusy(false); }
   }
 
@@ -121,7 +130,7 @@ export function ProductImageManager({ productId, images = [], pending, onPending
       <label className="mt-2 block text-xs font-medium">Alt text<input value={altDrafts[image.id] ?? ""} onChange={(event) => setAltDrafts((values) => ({ ...values, [image.id]: event.target.value }))} className={`${ADMIN_INPUT_CLASS} mt-1`} /></label>
       <div className="mt-2 flex justify-between gap-2"><button type="button" disabled={busy || image.isPrimary} onClick={() => setPrimary(image)} className="text-xs font-semibold text-primary-orange disabled:text-text-primary/35">Set primary</button><button type="button" disabled={busy || (altDrafts[image.id] ?? "") === image.alt} onClick={() => saveAlt(image)} className="text-xs font-semibold text-primary-orange disabled:text-text-primary/35">Save alt text</button></div>
     </article>)}</div>
-    {pending.length > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2">{pending.map((image,index) => <article key={image.key} className="rounded-lg border border-dashed border-primary-orange/40 p-3"><img src={image.previewUrl} alt="Pending upload preview" className="aspect-square w-full rounded-lg object-cover" /><p className="mt-2 text-xs font-semibold text-primary-orange">Pending upload {index + 1}</p><label className="mt-2 block text-xs font-medium">Alt text<input value={image.alt} onChange={(event) => patchPending(image.key, { alt: event.target.value })} className={`${ADMIN_INPUT_CLASS} mt-1`} /></label><div className="mt-2 flex justify-between"><label className="flex items-center gap-1 text-xs"><input type="radio" name="pending-primary" checked={image.isPrimary} onChange={() => onPendingChange(pending.map((item) => ({ ...item, isPrimary: item.key === image.key })))} /> Primary</label><button type="button" onClick={() => removePending(image)} className="text-xs font-semibold text-terracotta">Remove</button></div></article>)}</div>}
-    <ConfirmDialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} onConfirm={remove} title="Delete image?" description="This permanently deletes both the Product image metadata and its Cloudflare R2 object." confirmLabel="Delete image" loading={busy} />
+    {pending.length > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2">{pending.map((image,index) => <article key={image.key} className="rounded-lg border border-dashed border-primary-orange/40 p-3"><img src={image.previewUrl} alt={image.alt || "Pending Product image preview"} className="aspect-square w-full rounded-lg object-cover" /><p className="mt-2 text-xs font-semibold text-primary-orange">Pending upload {index + 1}</p><label className="mt-2 block text-xs font-medium">Alt text<input value={image.alt} onChange={(event) => patchPending(image.key, { alt: event.target.value })} className={`${ADMIN_INPUT_CLASS} mt-1`} /></label><div className="mt-2 flex justify-between"><label className="flex items-center gap-1 text-xs"><input type="radio" name="pending-primary" checked={image.isPrimary} onChange={() => onPendingChange(pending.map((item) => ({ ...item, isPrimary: item.key === image.key })))} /> Primary</label><button type="button" onClick={() => removePending(image)} className="text-xs font-semibold text-terracotta">Remove</button></div></article>)}</div>}
+    <ConfirmDialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} onConfirm={remove} title="Delete image?" description="This removes the Product image and deletes its Cloudflare R2 object. Deleted image metadata remains preserved by the Backend." confirmLabel="Delete image" loading={busy} />
   </section>;
 }
