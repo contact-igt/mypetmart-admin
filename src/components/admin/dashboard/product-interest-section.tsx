@@ -19,8 +19,8 @@ export function ProductInterestSection({ rows, mostViewedProductName }: { rows: 
     >
       <DataTable columns={COLUMNS} rows={rows.slice(0, 10)} getRowId={(r) => r.productId} />
       <div className="mt-4 rounded-lg border border-dashed border-border-subtle bg-cream-bg/50 p-3 text-xs text-text-primary/60">
-        <p className="font-semibold text-text-primary/70">Wishlist tracking not enabled in current project scope.</p>
-        <p className="mt-1">Wishlist is excluded from the signed proposal — see CLAUDE.md scope exclusions. Any wishlist figures shown elsewhere in this project are explicitly labelled &ldquo;Future integration preview&rdquo; and are never part of a KPI total.</p>
+        <p className="font-semibold text-text-primary/70">Wishlist analytics not built yet.</p>
+        <p className="mt-1">Wishlist V1 (customer-facing product saves) was approved and shipped after the original signed proposal — see CLAUDE.md scope exclusions for the approval history. Admin-side Wishlist analytics (e.g. most-wishlisted products) is a separate, not-yet-built scope item. Any wishlist figures shown elsewhere in this project are explicitly labelled &ldquo;Future integration preview&rdquo; and are never part of a KPI total.</p>
       </div>
     </SectionCard>
   );

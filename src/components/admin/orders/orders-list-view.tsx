@@ -2,9 +2,19 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { adminRepository } from "@/data/admin/mock-repository";
+import { listAdminProducts } from "@/lib/api/admin-product-api";
+import {
+  addAdminOrderNote,
+  bulkUpdateAdminOrderStatus,
+  getAdminOrderSummary,
+  listAdminOrders,
+  updateAdminOrderStatus,
+  type AdminOrderListItem,
+  type FulfilmentStatus,
+  type OrderStatus,
+  type PaymentStatus
+} from "@/lib/api/admin-order-api";
 import { getValidNextOrderStatuses, isDestructiveOrderTransition } from "@/data/admin/order-status-rules";
-import type { FulfilmentStatus, Order, OrderStatus, PaymentStatus } from "@/data/admin/types";
 import { useAdminData } from "../ui/use-admin-data";
 import { LoadingState, ErrorState, EmptyState } from "../ui/empty-state";
 import { DataTable, type Column } from "../ui/data-table";
@@ -20,22 +30,24 @@ const currency = new Intl.NumberFormat("en-IN", { style: "currency", currency: "
 const STATUSES: OrderStatus[] = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "return_requested"];
 const PAYMENT_STATUSES: PaymentStatus[] = ["pending", "paid", "failed", "refunded"];
 const FULFILMENT_STATUSES: FulfilmentStatus[] = ["unfulfilled", "processing", "packed", "shipped", "delivered"];
-/** The demo customer dataset only ships to these two states — see fixtures.ts CUSTOMER_LOCATION. */
-const STATES = ["Tamil Nadu", "Karnataka"];
 const PAGE_SIZE = 10;
 
 type SortKey = "newest" | "oldest" | "highest" | "lowest";
-const SORT_OPTIONS: { key: SortKey; label: string; sortBy: string; sortDir: "asc" | "desc" }[] = [
-  { key: "newest", label: "Newest", sortBy: "placedAt", sortDir: "desc" },
-  { key: "oldest", label: "Oldest", sortBy: "placedAt", sortDir: "asc" },
-  { key: "highest", label: "Highest value", sortBy: "total", sortDir: "desc" },
-  { key: "lowest", label: "Lowest value", sortBy: "total", sortDir: "asc" },
+const SORT_OPTIONS: { key: SortKey; label: string; sortBy: "placedAt" | "total"; sortDir: "ASC" | "DESC" }[] = [
+  { key: "newest", label: "Newest", sortBy: "placedAt", sortDir: "DESC" },
+  { key: "oldest", label: "Oldest", sortBy: "placedAt", sortDir: "ASC" },
+  { key: "highest", label: "Highest value", sortBy: "total", sortDir: "DESC" },
+  { key: "lowest", label: "Lowest value", sortBy: "total", sortDir: "ASC" }
 ];
 
+// getValidNextOrderStatuses/isDestructiveOrderTransition still power UX gating
+// here (per-row dropdown options, destructive-transition confirmation) — the
+// real Backend independently re-validates every transition and is what's
+// actually authoritative; this is purely a nicer default option list.
 const BULK_ACTIONS: { status: OrderStatus; label: string }[] = [
   { status: "confirmed", label: "Mark confirmed" },
   { status: "processing", label: "Mark processing" },
-  { status: "shipped", label: "Mark shipped" },
+  { status: "shipped", label: "Mark shipped" }
 ];
 
 function formatDate(iso: string): string {
@@ -54,38 +66,38 @@ export function OrdersListView() {
   const [state, setState] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [sortBy, setSortBy] = useState("placedAt");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [sortBy, setSortBy] = useState<"placedAt" | "total">("placedAt");
+  const [sortDir, setSortDir] = useState<"ASC" | "DESC">("DESC");
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const [productOptions, setProductOptions] = useState<{ id: string; name: string }[]>([]);
+  const [productOptions, setProductOptions] = useState<{ id: number; name: string }[]>([]);
   useEffect(() => {
-    adminRepository.listProducts({ pageSize: 100, sortBy: "name", sortDir: "asc" }).then((res) =>
-      setProductOptions(res.items.map((p) => ({ id: p.id, name: p.name }))),
+    listAdminProducts({ pageSize: 100, sort: "name", order: "ASC" }).then((res) =>
+      setProductOptions(res.items.map((p) => ({ id: p.id, name: p.name })))
     );
   }, []);
 
-  const summaryFetcher = useCallback(() => adminRepository.getOrderSummary(), []);
+  const summaryFetcher = useCallback(() => getAdminOrderSummary(), []);
   const { data: summary, reload: reloadSummary } = useAdminData(summaryFetcher);
 
   const fetcher = useCallback(
     () =>
-      adminRepository.listOrders({
-        search,
+      listAdminOrders({
+        search: search || undefined,
         status: status || undefined,
         paymentStatus: paymentStatus || undefined,
         fulfilmentStatus: fulfilmentStatus || undefined,
-        productId: productId || undefined,
+        productId: productId ? Number(productId) : undefined,
         state: state || undefined,
         from: from ? new Date(from).toISOString() : undefined,
         to: to ? new Date(to + "T23:59:59").toISOString() : undefined,
         sortBy,
         sortDir,
         page,
-        pageSize: PAGE_SIZE,
+        pageSize: PAGE_SIZE
       }),
-    [search, status, paymentStatus, fulfilmentStatus, productId, state, from, to, sortBy, sortDir, page],
+    [search, status, paymentStatus, fulfilmentStatus, productId, state, from, to, sortBy, sortDir, page]
   );
   const { data, loading, error, reload } = useAdminData(fetcher);
 
@@ -117,22 +129,22 @@ export function OrdersListView() {
     setFrom("");
     setTo("");
     setSortBy("placedAt");
-    setSortDir("desc");
+    setSortDir("DESC");
     resetPage();
   }
 
   const hasActiveFilters = Boolean(
-    search || status || paymentStatus || fulfilmentStatus || productId || state || from || to || sortBy !== "placedAt" || sortDir !== "desc",
+    search || status || paymentStatus || fulfilmentStatus || productId || state || from || to || sortBy !== "placedAt" || sortDir !== "DESC"
   );
 
   // ---- single-row inline status update ----
-  const [pendingStatusChange, setPendingStatusChange] = useState<{ order: Order; next: OrderStatus } | null>(null);
+  const [pendingStatusChange, setPendingStatusChange] = useState<{ order: AdminOrderListItem; next: OrderStatus } | null>(null);
   const [statusUpdating, setStatusUpdating] = useState(false);
 
-  async function applyStatusChange(order: Order, next: OrderStatus) {
+  async function applyStatusChange(order: AdminOrderListItem, next: OrderStatus) {
     setStatusUpdating(true);
     try {
-      await adminRepository.updateOrderStatus(order.id, next);
+      await updateAdminOrderStatus(order.id, next);
       showToast(`${order.orderNumber} marked as ${next.replace(/_/g, " ")}.`);
       setPendingStatusChange(null);
       refreshAll();
@@ -143,7 +155,7 @@ export function OrdersListView() {
     }
   }
 
-  function handleRowStatusSelect(order: Order, next: OrderStatus) {
+  function handleRowStatusSelect(order: AdminOrderListItem, next: OrderStatus) {
     if (isDestructiveOrderTransition(next)) {
       setPendingStatusChange({ order, next });
     } else {
@@ -152,7 +164,7 @@ export function OrdersListView() {
   }
 
   // ---- single-row quick note ----
-  const [noteTarget, setNoteTarget] = useState<Order | null>(null);
+  const [noteTarget, setNoteTarget] = useState<AdminOrderListItem | null>(null);
   const [noteText, setNoteText] = useState("");
   const [addingNote, setAddingNote] = useState(false);
 
@@ -161,7 +173,7 @@ export function OrdersListView() {
     if (!noteTarget || !noteText.trim()) return;
     setAddingNote(true);
     try {
-      await adminRepository.addOrderNote(noteTarget.id, noteText.trim());
+      await addAdminOrderNote(noteTarget.id, noteText.trim());
       showToast("Note added.");
       setNoteTarget(null);
       setNoteText("");
@@ -180,10 +192,10 @@ export function OrdersListView() {
     if (!pendingBulkAction) return;
     setBulkBusy(true);
     try {
-      const result = await adminRepository.bulkUpdateOrderStatus([...selectedIds], pendingBulkAction);
+      const result = await bulkUpdateAdminOrderStatus([...selectedIds].map(Number), pendingBulkAction);
       if (result.updated > 0) {
         showToast(
-          `Updated ${result.updated} order${result.updated === 1 ? "" : "s"}${result.skipped > 0 ? ` — skipped ${result.skipped} that couldn't move to this status` : ""}.`,
+          `Updated ${result.updated} order${result.updated === 1 ? "" : "s"}${result.skipped > 0 ? ` — skipped ${result.skipped} that couldn't move to this status` : ""}.`
         );
       } else {
         showToast("No selected orders could move to that status.", "error");
@@ -198,12 +210,12 @@ export function OrdersListView() {
     }
   }
 
-  const columns: Column<Order>[] = [
+  const columns: Column<AdminOrderListItem>[] = [
     { key: "orderNumber", header: "Order", render: (o) => <span className="font-medium">{o.orderNumber}</span> },
     { key: "placedAt", header: "Date", render: (o) => formatDate(o.placedAt) },
-    { key: "customerName", header: "Customer", render: (o) => o.customerName },
-    { key: "items", header: "Items", render: (o) => o.items.reduce((sum, i) => sum + i.quantity, 0) },
-    { key: "total", header: "Total", render: (o) => currency.format(o.total) },
+    { key: "customer", header: "Customer", render: (o) => o.customer?.name ?? "Guest" },
+    { key: "itemCount", header: "Items", render: (o) => o.itemCount },
+    { key: "total", header: "Total", render: (o) => currency.format(Number(o.total)) },
     { key: "paymentStatus", header: "Payment", render: (o) => <StatusBadge status={o.paymentStatus} /> },
     { key: "fulfilmentStatus", header: "Fulfilment", render: (o) => <StatusBadge status={o.fulfilmentStatus} /> },
     { key: "status", header: "Status", render: (o) => <StatusBadge status={o.status} /> },
@@ -243,15 +255,15 @@ export function OrdersListView() {
           </div>
         );
       },
-      className: "text-right",
-    },
+      className: "text-right"
+    }
   ];
 
   return (
     <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-xl font-bold text-text-primary">Orders</h1>
-        <p className="mt-1 text-sm text-text-primary/60">{data?.total ?? "…"} orders in the demo dataset.</p>
+        <p className="mt-1 text-sm text-text-primary/60">{data?.total ?? "…"} orders.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
@@ -261,7 +273,7 @@ export function OrdersListView() {
         <StatCard label="Shipped" value={String(summary?.shipped ?? "…")} />
         <StatCard label="Delivered" value={String(summary?.delivered ?? "…")} />
         <StatCard label="Cancelled" value={String(summary?.cancelled ?? "…")} />
-        <StatCard label="Returns" value={String(summary?.returns ?? "…")} />
+        <StatCard label="Returns" value={String(summary?.returnRequested ?? "…")} />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -273,7 +285,7 @@ export function OrdersListView() {
               setSearch(e.target.value);
               resetPage();
             }}
-            placeholder="Order #, customer, phone or email…"
+            placeholder="Order #, customer name, email or phone…"
             aria-label="Search orders"
             className="h-9 w-64 rounded-lg border border-border-subtle bg-white pl-8 pr-3 text-sm focus-visible:border-primary-orange"
           />
@@ -342,22 +354,16 @@ export function OrdersListView() {
             </option>
           ))}
         </select>
-        <select
+        <input
           value={state}
           onChange={(e) => {
             setState(e.target.value);
             resetPage();
           }}
+          placeholder="State…"
           aria-label="Filter by state"
-          className="h-9 rounded-lg border border-border-subtle bg-white px-3 text-sm focus-visible:border-primary-orange"
-        >
-          <option value="">All states</option>
-          {STATES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+          className="h-9 w-32 rounded-lg border border-border-subtle bg-white px-3 text-sm focus-visible:border-primary-orange"
+        />
         <label className="flex items-center gap-1.5 text-xs text-text-primary/60">
           From
           <input
@@ -404,7 +410,7 @@ export function OrdersListView() {
           {fulfilmentStatus && <FilterChip label={`Fulfilment: ${fulfilmentStatus}`} onRemove={() => { setFulfilmentStatus(""); resetPage(); }} />}
           {productId && (
             <FilterChip
-              label={`Product: ${productOptions.find((p) => p.id === productId)?.name ?? productId}`}
+              label={`Product: ${productOptions.find((p) => String(p.id) === productId)?.name ?? productId}`}
               onRemove={() => { setProductId(""); resetPage(); }}
             />
           )}
@@ -457,7 +463,7 @@ export function OrdersListView() {
           <DataTable
             columns={columns}
             rows={data.items}
-            getRowId={(o) => o.id}
+            getRowId={(o) => String(o.id)}
             onRowClick={(o) => router.push(`/admin/orders/${o.id}`)}
             selectedIds={selectedIds}
             onSelectionChange={setSelectedIds}
@@ -473,7 +479,7 @@ export function OrdersListView() {
         title={pendingStatusChange?.next === "cancelled" ? "Cancel this order?" : "Mark as return requested?"}
         description={
           pendingStatusChange?.next === "cancelled"
-            ? `This marks ${pendingStatusChange?.order.orderNumber} as cancelled. This can't be undone in the demo.`
+            ? `This marks ${pendingStatusChange?.order.orderNumber} as cancelled.`
             : `This marks ${pendingStatusChange?.order.orderNumber} as return requested.`
         }
         confirmLabel={pendingStatusChange?.next === "cancelled" ? "Cancel order" : "Confirm"}

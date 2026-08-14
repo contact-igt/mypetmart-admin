@@ -1,25 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { adminRepository } from "@/data/admin/mock-repository";
-import {
-  getValidNextFulfilmentStatuses,
-  getValidNextOrderStatuses,
-  getValidNextPaymentStatuses,
-  isDestructiveOrderTransition,
-} from "@/data/admin/order-status-rules";
-import type { FulfilmentStatus, Order, OrderStatus, PaymentStatus, ReturnRequest, ShippingMethod } from "@/data/admin/types";
+import { useCallback, useState } from "react";
+import { addAdminOrderNote, getAdminOrder, updateAdminOrderStatus, type OrderStatus } from "@/lib/api/admin-order-api";
+import { getValidNextOrderStatuses, isDestructiveOrderTransition } from "@/data/admin/order-status-rules";
 import { useAdminData } from "../ui/use-admin-data";
 import { LoadingState, ErrorState } from "../ui/empty-state";
 import { StatusBadge } from "../ui/status-badge";
 import { ConfirmDialog } from "../ui/confirm-dialog";
-import { ADMIN_INPUT_CLASS } from "../ui/form-field";
 import { useToast } from "../ui/toast";
-import { ArrowRightIcon, MailIcon, PhoneIcon, ReturnIcon } from "@/components/icons";
+import { MailIcon, PhoneIcon, ReturnIcon } from "@/components/icons";
 
-const currency = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
-const CARRIERS = ["Blue Dart", "Delhivery", "India Post", "Ecom Express"];
+const currency = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 });
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -27,13 +19,8 @@ function formatDateTime(iso: string): string {
 
 export function OrderDetailView({ orderId }: { orderId: string }) {
   const { showToast } = useToast();
-  const fetcher = useCallback(() => adminRepository.getOrder(orderId), [orderId]);
+  const fetcher = useCallback(() => getAdminOrder(orderId), [orderId]);
   const { data: order, loading, error, reload } = useAdminData(fetcher);
-
-  const [returns, setReturns] = useState<ReturnRequest[]>([]);
-  useEffect(() => {
-    adminRepository.getReturnsForOrder(orderId).then(setReturns);
-  }, [orderId]);
 
   // ---- order status ----
   const [nextStatus, setNextStatus] = useState<OrderStatus | "">("");
@@ -53,7 +40,7 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
     if (!nextStatus || !order) return;
     setUpdatingStatus(true);
     try {
-      await adminRepository.updateOrderStatus(order.id, nextStatus);
+      await updateAdminOrderStatus(order.id, nextStatus);
       showToast(`Order marked as ${nextStatus.replace(/_/g, " ")}.`);
       setNextStatus("");
       setConfirmingStatus(false);
@@ -62,44 +49,6 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
       showToast(err instanceof Error ? err.message : "Could not update the order status.", "error");
     } finally {
       setUpdatingStatus(false);
-    }
-  }
-
-  // ---- fulfilment status ----
-  const [nextFulfilment, setNextFulfilment] = useState<FulfilmentStatus | "">("");
-  const [updatingFulfilment, setUpdatingFulfilment] = useState(false);
-
-  async function applyFulfilmentUpdate() {
-    if (!nextFulfilment || !order) return;
-    setUpdatingFulfilment(true);
-    try {
-      await adminRepository.updateOrderFulfilmentStatus(order.id, nextFulfilment);
-      showToast(`Fulfilment marked as ${nextFulfilment}.`);
-      setNextFulfilment("");
-      reload();
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Could not update fulfilment.", "error");
-    } finally {
-      setUpdatingFulfilment(false);
-    }
-  }
-
-  // ---- payment status ----
-  const [nextPayment, setNextPayment] = useState<PaymentStatus | "">("");
-  const [updatingPayment, setUpdatingPayment] = useState(false);
-
-  async function applyPaymentUpdate() {
-    if (!nextPayment || !order) return;
-    setUpdatingPayment(true);
-    try {
-      await adminRepository.updateOrderPaymentStatus(order.id, nextPayment);
-      showToast(`Payment marked as ${nextPayment}.`);
-      setNextPayment("");
-      reload();
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Could not update payment status.", "error");
-    } finally {
-      setUpdatingPayment(false);
     }
   }
 
@@ -112,7 +61,7 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
     if (!note.trim() || !order) return;
     setAddingNote(true);
     try {
-      await adminRepository.addOrderNote(order.id, note.trim());
+      await addAdminOrderNote(order.id, note.trim());
       setNote("");
       reload();
     } catch {
@@ -126,8 +75,13 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
   if (error || !order) return <ErrorState message={error ?? "Order not found."} onRetry={reload} />;
 
   const statusOptions = getValidNextOrderStatuses(order.status);
-  const fulfilmentOptions = getValidNextFulfilmentStatuses(order.fulfilmentStatus);
-  const paymentOptions = getValidNextPaymentStatuses(order.paymentStatus);
+  // Derived purely from real persisted timestamps — no synthetic/fabricated
+  // history. Payment/fulfilment/shipment milestones will extend this once
+  // those modules exist.
+  const timeline = [
+    { id: "placed", label: "Order placed", at: order.placedAt },
+    ...(order.cancelledAt ? [{ id: "cancelled", label: "Order cancelled", at: order.cancelledAt }] : [])
+  ];
 
   return (
     <div className="flex flex-col gap-5">
@@ -146,13 +100,13 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
         </div>
       </div>
 
-      {returns.length > 0 && (
+      {order.returns.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-terracotta/30 bg-terracotta/5 px-4 py-3 text-sm">
           <ReturnIcon width={15} height={15} className="shrink-0 text-terracotta" />
           <span className="text-text-primary">
-            {returns.length} return/replacement request{returns.length === 1 ? "" : "s"} linked to this order:
+            {order.returns.length} return/replacement request{order.returns.length === 1 ? "" : "s"} linked to this order:
           </span>
-          {returns.map((r) => (
+          {order.returns.map((r) => (
             <Link key={r.id} href={`/admin/returns/${r.id}`} className="font-semibold text-terracotta hover:underline">
               {r.type === "return" ? "Return" : "Replacement"} — {r.status}
             </Link>
@@ -166,30 +120,30 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
             <h2 className="text-sm font-semibold text-text-primary">Items</h2>
             <ul className="mt-3 flex flex-col gap-2.5">
               {order.items.map((item) => (
-                <li key={`${item.productId}-${item.sku}`} className="flex items-center justify-between gap-3 text-sm">
+                <li key={item.id} className="flex items-center justify-between gap-3 text-sm">
                   <div className="min-w-0">
-                    <p className="truncate font-medium text-text-primary">{item.name}</p>
+                    <p className="truncate font-medium text-text-primary">{item.productName}</p>
                     <p className="truncate text-xs text-text-primary/50">
-                      SKU {item.sku}
-                      {item.variantLabel ? ` · ${item.variantLabel}` : ""} · Qty {item.quantity} · {currency.format(item.price)} each
+                      SKU {item.variantSku ?? item.productSku}
+                      {item.variantName ? ` · ${item.variantName}` : ""} · Qty {item.quantity} · {currency.format(Number(item.unitPrice))} each
                     </p>
                   </div>
-                  <span className="shrink-0 font-medium text-text-primary">{currency.format(item.price * item.quantity)}</span>
+                  <span className="shrink-0 font-medium text-text-primary">{currency.format(Number(item.lineTotal))}</span>
                 </li>
               ))}
             </ul>
             <div className="mt-4 flex flex-col gap-1 border-t border-border-subtle pt-3 text-sm">
               <div className="flex justify-between text-text-primary/70">
                 <span>Subtotal</span>
-                <span>{currency.format(order.subtotal)}</span>
+                <span>{currency.format(Number(order.subtotal))}</span>
               </div>
               <div className="flex justify-between text-text-primary/70">
                 <span>Shipping</span>
-                <span>{order.shippingFee === 0 ? "Free" : currency.format(order.shippingFee)}</span>
+                <span>{Number(order.shippingFee) === 0 ? "Free (V1 fixed rate — pending shipping integration)" : currency.format(Number(order.shippingFee))}</span>
               </div>
               <div className="flex justify-between text-base font-bold text-text-primary">
                 <span>Total</span>
-                <span>{currency.format(order.total)}</span>
+                <span>{currency.format(Number(order.total))}</span>
               </div>
             </div>
           </div>
@@ -197,14 +151,21 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div className="rounded-xl border border-border-subtle bg-white p-5">
               <h2 className="text-sm font-semibold text-text-primary">Customer</h2>
-              <Link href={`/admin/customers/${order.customerId}`} className="mt-2 block text-sm font-medium text-primary-orange hover:underline">
-                {order.customerName}
-              </Link>
+              {order.customer ? (
+                <Link href={`/admin/customers/${order.customer.id}`} className="mt-2 block text-sm font-medium text-primary-orange hover:underline">
+                  {order.customer.name}
+                </Link>
+              ) : (
+                <p className="mt-2 text-sm font-medium text-text-primary/70">Guest</p>
+              )}
               <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-text-primary/50">Delivery address</p>
-              <p className="mt-1 text-sm text-text-primary/80">{order.shippingAddress}</p>
+              <p className="mt-1 text-sm text-text-primary/80">{order.shippingAddress.recipientName}</p>
+              <p className="text-sm text-text-primary/80">{order.shippingAddress.line1}</p>
+              {order.shippingAddress.line2 && <p className="text-sm text-text-primary/80">{order.shippingAddress.line2}</p>}
               <p className="mt-1 text-xs text-text-primary/50">
-                {order.city}, {order.state}
+                {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.postalCode}, {order.shippingAddress.country}
               </p>
+              <p className="mt-1 text-xs text-text-primary/50">{order.shippingAddress.phone}</p>
               <div className="mt-4 flex flex-wrap gap-2 border-t border-border-subtle pt-3">
                 <button
                   type="button"
@@ -224,78 +185,83 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
             </div>
             <div className="rounded-xl border border-border-subtle bg-white p-5">
               <h2 className="text-sm font-semibold text-text-primary">Payment</h2>
-              <dl className="mt-2 flex flex-col gap-1.5 text-sm">
-                <div className="flex justify-between">
-                  <dt className="text-text-primary/60">Method</dt>
-                  <dd className="font-medium text-text-primary">{order.paymentMethod}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-text-primary/60">Status</dt>
-                  <dd>
-                    <StatusBadge status={order.paymentStatus} />
-                  </dd>
-                </div>
-              </dl>
-              <p className="mt-2 text-xs text-text-primary/50">Demo status only — no live payment capture or refund is triggered.</p>
-              {paymentOptions.length > 0 && (
-                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border-subtle pt-3">
-                  <select
-                    value={nextPayment}
-                    onChange={(e) => setNextPayment(e.target.value as PaymentStatus)}
-                    aria-label="New payment status"
-                    className={`${ADMIN_INPUT_CLASS} h-9 flex-1`}
-                  >
-                    <option value="">Change payment status…</option>
-                    {paymentOptions.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={applyPaymentUpdate}
-                    disabled={!nextPayment || updatingPayment}
-                    className="rounded-lg border border-border-subtle px-3 py-2 text-xs font-semibold text-text-primary hover:bg-cream-bg disabled:opacity-50"
-                  >
-                    {updatingPayment ? "Saving…" : "Save"}
-                  </button>
+              {order.commerceException && (
+                <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                  Payment captured, but this order needs manual review ({order.commerceException.replace(/_/g, " ")}) before it can
+                  be confirmed for fulfilment.
+                </p>
+              )}
+              {order.payments.length === 0 ? (
+                <p className="mt-2 text-sm text-text-primary/55">No payment recorded yet.</p>
+              ) : (
+                <div className="mt-2 flex flex-col gap-3 text-sm">
+                  {order.payments.map((payment) => (
+                    <div key={payment.id} className="rounded-lg border border-border-subtle p-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-text-primary">
+                          {payment.provider}
+                          {payment.method ? ` · ${payment.method}` : ""}
+                        </span>
+                        <StatusBadge status={payment.status} />
+                      </div>
+                      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-text-primary/70">
+                        <dt>Amount</dt>
+                        <dd className="text-right">{currency.format(Number(payment.amount))}</dd>
+                        <dt>Merchant txnid</dt>
+                        <dd className="text-right font-mono">{payment.providerOrderId ?? "—"}</dd>
+                        <dt>Provider payment ID</dt>
+                        <dd className="text-right font-mono">{payment.providerPaymentId ?? "—"}</dd>
+                        <dt>Created</dt>
+                        <dd className="text-right">{formatDateTime(payment.createdAt)}</dd>
+                        {payment.paidAt && (
+                          <>
+                            <dt>Paid</dt>
+                            <dd className="text-right">{formatDateTime(payment.paidAt)}</dd>
+                          </>
+                        )}
+                        {payment.failedAt && (
+                          <>
+                            <dt>Failed</dt>
+                            <dd className="text-right">{formatDateTime(payment.failedAt)}</dd>
+                          </>
+                        )}
+                      </dl>
+                    </div>
+                  ))}
                 </div>
               )}
+              <div className="mt-2 flex items-center justify-between border-t border-border-subtle pt-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-text-primary/50">Order payment status</span>
+                <StatusBadge status={order.paymentStatus} />
+              </div>
+              <p className="mt-2 text-xs text-text-primary/50">
+                Read-only — payment status is provider-authoritative (verified via PayU webhook/Verify Payment API); it cannot be
+                hand-set here.
+              </p>
             </div>
           </div>
 
           <div className="rounded-xl border border-border-subtle bg-white p-5">
             <h2 className="text-sm font-semibold text-text-primary">Shipping &amp; fulfilment</h2>
-            <p className="mt-1 text-xs text-text-primary/50">Carrier and tracking are demo fields — no live courier API is connected.</p>
-            <ShippingDetailsForm order={order} onSaved={reload} />
-
-            {fulfilmentOptions.length > 0 && (
-              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border-subtle pt-4">
-                <span className="text-xs font-semibold uppercase tracking-wide text-text-primary/50">Fulfilment</span>
-                <select
-                  value={nextFulfilment}
-                  onChange={(e) => setNextFulfilment(e.target.value as FulfilmentStatus)}
-                  aria-label="New fulfilment status"
-                  className="h-9 rounded-lg border border-border-subtle bg-white px-3 text-sm focus-visible:border-primary-orange"
-                >
-                  <option value="">Choose a status…</option>
-                  {fulfilmentOptions.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={applyFulfilmentUpdate}
-                  disabled={!nextFulfilment || updatingFulfilment}
-                  className="rounded-lg bg-primary-orange px-3.5 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
-                >
-                  {updatingFulfilment ? "Updating…" : "Update"}
-                </button>
-              </div>
+            <p className="mt-1 text-xs text-text-primary/50">Read-only — live carrier/tracking assignment is deferred to the shipping integration stage.</p>
+            {order.shipments.length === 0 ? (
+              <p className="mt-3 text-sm text-text-primary/55">No shipment created yet.</p>
+            ) : (
+              <ul className="mt-3 flex flex-col gap-2 text-sm">
+                {order.shipments.map((shipment) => (
+                  <li key={shipment.id} className="flex items-center justify-between">
+                    <span className="text-text-primary/70">
+                      {shipment.method} · {shipment.carrier ?? "Carrier not assigned"} · {shipment.trackingNumber ?? "No tracking number"}
+                    </span>
+                    <StatusBadge status={shipment.status} />
+                  </li>
+                ))}
+              </ul>
             )}
+            <div className="mt-3 flex items-center justify-between border-t border-border-subtle pt-3">
+              <span className="text-xs font-semibold uppercase tracking-wide text-text-primary/50">Fulfilment status</span>
+              <StatusBadge status={order.fulfilmentStatus} />
+            </div>
           </div>
 
           <div className="rounded-xl border border-border-subtle bg-white p-5">
@@ -325,7 +291,7 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
                   disabled={!nextStatus || updatingStatus}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-primary-orange px-3.5 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
                 >
-                  {updatingStatus ? "Updating…" : "Update"} <ArrowRightIcon width={13} height={13} />
+                  {updatingStatus ? "Updating…" : "Update"}
                 </button>
               </div>
             )}
@@ -336,7 +302,7 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
           <div className="rounded-xl border border-border-subtle bg-white p-5">
             <h2 className="text-sm font-semibold text-text-primary">Timeline</h2>
             <ol className="mt-3 flex flex-col gap-3">
-              {order.timeline.map((event) => (
+              {timeline.map((event) => (
                 <li key={event.id} className="flex gap-2.5 text-sm">
                   <span aria-hidden="true" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-orange" />
                   <div>
@@ -356,7 +322,7 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
                 <li key={n.id} className="rounded-lg bg-cream-bg px-3 py-2 text-sm">
                   <p className="text-text-primary">{n.message}</p>
                   <p className="mt-1 text-xs text-text-primary/45">
-                    {n.author} · {formatDateTime(n.createdAt)}
+                    {n.authorName} · {formatDateTime(n.createdAt)}
                   </p>
                 </li>
               ))}
@@ -392,77 +358,12 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
         title={nextStatus === "cancelled" ? "Cancel this order?" : "Mark as return requested?"}
         description={
           nextStatus === "cancelled"
-            ? "This marks the order as cancelled. This can't be undone in the demo."
+            ? "This marks the order as cancelled. Stock, refund, and shipment cancellation are not yet automated — handle those manually until the Payment/Shipping stages exist."
             : "This marks the order as return requested and records it on the timeline."
         }
         confirmLabel={nextStatus === "cancelled" ? "Cancel order" : "Confirm"}
         loading={updatingStatus}
       />
     </div>
-  );
-}
-
-/**
- * Owns its own form state, initialised directly from `order` — safe because
- * this only ever mounts after OrderDetailView's loading/error guards have
- * already confirmed `order` is loaded, and the only thing that changes
- * shippingMethod/carrier/trackingNumber is this form's own save action. No
- * reset effect needed (see category-form-dialog.tsx for the same pattern).
- */
-function ShippingDetailsForm({ order, onSaved }: { order: Order; onSaved: () => void }) {
-  const { showToast } = useToast();
-  const [shippingMethod, setShippingMethod] = useState<ShippingMethod>(order.shippingMethod);
-  const [carrier, setCarrier] = useState(order.carrier);
-  const [trackingNumber, setTrackingNumber] = useState(order.trackingNumber);
-  const [saving, setSaving] = useState(false);
-
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    setSaving(true);
-    try {
-      await adminRepository.updateOrderShippingDetails(order.id, { shippingMethod, carrier, trackingNumber });
-      showToast("Shipping details saved.");
-      onSaved();
-    } catch {
-      showToast("Could not save shipping details.", "error");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-      <label className="flex flex-col gap-1 text-xs font-semibold text-text-primary/60">
-        Method
-        <select value={shippingMethod} onChange={(e) => setShippingMethod(e.target.value as ShippingMethod)} className={ADMIN_INPUT_CLASS}>
-          <option value="standard">Standard</option>
-          <option value="express">Express</option>
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs font-semibold text-text-primary/60">
-        Carrier
-        <select value={carrier} onChange={(e) => setCarrier(e.target.value)} className={ADMIN_INPUT_CLASS}>
-          <option value="">Not assigned</option>
-          {CARRIERS.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs font-semibold text-text-primary/60">
-        Tracking number
-        <input value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} placeholder="e.g. AWB1234IN" className={ADMIN_INPUT_CLASS} />
-      </label>
-      <div className="sm:col-span-3">
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-lg border border-border-subtle px-3.5 py-2 text-xs font-semibold text-text-primary transition-colors duration-150 ease-out hover:bg-cream-bg disabled:opacity-50"
-        >
-          {saving ? "Saving…" : "Save shipping details"}
-        </button>
-      </div>
-    </form>
   );
 }
