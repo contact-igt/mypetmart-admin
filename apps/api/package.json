@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=22"
   },
   "scripts": {
-    "dev": "node --watch src/server.ts",
+    "dev": "node --experimental-strip-types --watch src/server.ts",
     "start": "node src/server.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

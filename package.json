@@ -4,9 +4,10 @@
   "version": "0.1.0",
   "packageManager": "pnpm@11.18.0",
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=22"
   },
   "scripts": {
+    "dev": "next dev -p 4000",
     "dev:web": "pnpm --filter @mypetmart/web dev",
     "build:web": "pnpm --filter @mypetmart/web build",
     "lint:web": "pnpm --filter @mypetmart/web lint",
@@ -17,5 +18,20 @@
     "test:api": "pnpm --filter @mypetmart/api test",
     "prisma:validate": "pnpm --filter @mypetmart/api prisma:validate",
     "prisma:generate": "pnpm --filter @mypetmart/api prisma:generate"
+  },
+  "dependencies": {
+    "next": "16.2.12",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.12",
+    "tailwindcss": "^4",
+    "typescript": "^5"
   }
 }
