@@ -1,3 +1,23 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# testing
+coverage/
+
+# next.js
+.next/
+out/
+
+# production
+build/
+dist/
+
+# lockfiles
+package-lock.json
+
+# misc
 .DS_Store
 Thumbs.db
 
@@ -25,4 +45,6 @@ apps/api/uploads/
 tmp/
 temp/
 
-project-reference/rendered/
+# vercel
+.vercel
+
