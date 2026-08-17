@@ -19,21 +19,31 @@ package-lock.json
 
 # misc
 .DS_Store
-*.pem
 Thumbs.db
-*.tsbuildinfo
 
-# debug
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+*.log
 npm-debug.log*
+pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# local env files
-.env*.local
 .env
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
+
+.vscode/
+.idea/
+
+apps/web/.vercel/
+apps/api/uploads/
+tmp/
+temp/
 
 # vercel
 .vercel

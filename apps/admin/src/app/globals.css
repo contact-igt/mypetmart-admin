@@ -1,0 +1,308 @@
+@import "tailwindcss";
+
+/*
+ * MyPetMart design tokens.
+ * Values sourced from docs/DESIGN_SYSTEM.md §3–6; token IDs mirror that
+ * document's naming exactly for traceability back to the locked reference.
+ *
+ * EXACT        — pixel-sampled from the source PDFs (DESIGN_SYSTEM.md §3).
+ * APPROXIMATE  — visually estimated, not pixel-sampled (labelled in §3/§6).
+ * DERIVED      — computed from an EXACT/APPROXIMATE token (e.g. color-mix),
+ *                not a newly invented hex value.
+ * PLACEHOLDER  — no reference value exists yet; reuses an already-locked
+ *                token rather than fabricating a new colour. See
+ *                docs/DECISIONS.md D013.
+ */
+@theme inline {
+  /* Colour — surfaces */
+  --color-cream-bg: #fff5e9; /* EXACT — page background */
+  --color-surface-secondary: var(--color-peach-hero); /* PLACEHOLDER alias — secondary warm surface, no distinct value documented */
+  --color-peach-hero: #f6d3a9; /* EXACT */
+  --color-orange-hero: #eca469; /* EXACT */
+  --color-white: #ffffff; /* EXACT — white/light card surface */
+
+  /* Colour — brand mark (logo only) */
+  --color-logo-navy: #0b1f49; /* EXACT — pixel-sampled from ui-home-page-01.jpg for the header/footer logo mark; not yet in docs/DESIGN_SYSTEM.md §3, pending a documentation-only follow-up task */
+
+  /* Colour — action & accent */
+  --color-primary-orange: #d65e2a; /* EXACT */
+  --color-terracotta: #bb5036; /* EXACT */
+  --color-mint-sage: #d4ecd6; /* EXACT */
+  --color-yellow-card: #ffd96a; /* EXACT */
+  --color-teal-mint-accent: #7fe0c8; /* APPROXIMATE — DESIGN_SYSTEM.md §3; "NEW" product badge, distinct (brighter) than color-mint-sage */
+
+  /* Colour — text */
+  --color-text-primary: #2b1b14; /* APPROXIMATE — DESIGN_SYSTEM.md §3 */
+  --color-text-muted: color-mix(in srgb, var(--color-text-primary) 65%, transparent); /* DERIVED — no separate muted token sampled */
+  --color-deep-brown: #35221b; /* EXACT — footer bg / dark solid surfaces */
+
+  /* Colour — structure */
+  --color-border-subtle: color-mix(in srgb, var(--color-deep-brown) 16%, transparent); /* DERIVED — §10 describes a visible border, no hex sampled */
+
+  /* Colour — status (PLACEHOLDER — §3: "no separate in-stock/success colour observed") */
+  --color-state-success: var(--color-mint-sage);
+  --color-state-destructive: var(--color-terracotta); /* sale-badge family, §3 */
+
+  /* Colour — focus */
+  --color-focus-ring: var(--color-deep-brown); /* chosen for contrast across every warm surface, not just cream */
+
+  /* Typography */
+  --font-display: var(--font-fredoka), "Baloo 2", ui-rounded, system-ui, sans-serif;
+  --font-display-italic: var(--font-fraunces), "Playfair Display", Georgia, serif;
+  --font-body: var(--font-inter), "Plus Jakarta Sans", system-ui, sans-serif;
+
+  /* Layout */
+  --radius-card: 20px; /* APPROXIMATE — §6 range 16–24px */
+  --radius-pill: 999px;
+}
+
+:root {
+  /* Typography roles not exposed as Tailwind utilities (consumed via var() in component classes) */
+  --font-nav: var(--font-body);
+  --weight-display: 600;
+  --weight-body: 400;
+  --leading-heading: 1.1;
+  --leading-body: 1.65;
+  --tracking-eyebrow: 0.04em; /* EXACT — DESIGN_SYSTEM.md §4 */
+  --tracking-button: 0.02em; /* implementation default, not sourced */
+
+  /* Layout primitives */
+  --content-max-width: 1440px; /* APPROXIMATE — §6 */
+  --gutter-desktop: 96px; /* APPROXIMATE — §6, lower bound of 96–130px */
+  --gutter-tablet: 40px; /* inherited convention — §6 */
+  --gutter-mobile: 24px; /* inherited convention — §6 */
+  --section-spacing-desktop: 120px; /* APPROXIMATE — §5 range 96–140px */
+  --section-spacing-mobile: 56px; /* APPROXIMATE — §5 range 48–64px */
+  --card-padding: 28px; /* APPROXIMATE — §5 range 24–32px */
+  --button-height: 52px; /* APPROXIMATE — §6 range 48–56px */
+  --input-height: 46px; /* APPROXIMATE — §6 range 44–48px */
+  --header-height: 96px; /* APPROXIMATE — §6, reserved for later use */
+
+  /* Motion */
+  --duration-hover: 150ms; /* CLAUDE.md hard rule: hover transitions ≤150ms */
+  --easing-standard: ease-out; /* implementation default — no motion visible in a static PDF, §17 */
+  --easing-entrance: ease-out;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background: var(--color-cream-bg);
+    color: var(--color-text-primary);
+    font-family: var(--font-body);
+    font-weight: var(--weight-body);
+    line-height: var(--leading-body);
+    min-width: 320px;
+    overflow-x: hidden;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: var(--weight-display);
+    line-height: var(--leading-heading);
+    margin: 0;
+  }
+
+  p {
+    margin: 0;
+  }
+
+  img,
+  picture,
+  svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+
+  a {
+    color: inherit;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--color-primary-orange);
+    color: var(--color-white);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .site-container {
+    width: 100%;
+    max-width: var(--content-max-width);
+    margin-inline: auto;
+    padding-inline: var(--gutter-mobile);
+  }
+  @media (min-width: 768px) {
+    .site-container {
+      padding-inline: var(--gutter-tablet);
+    }
+  }
+  @media (min-width: 1280px) {
+    .site-container {
+      padding-inline: var(--gutter-desktop);
+    }
+  }
+
+  .section-block {
+    padding-block: var(--section-spacing-mobile);
+  }
+  @media (min-width: 768px) {
+    .section-block {
+      padding-block: var(--section-spacing-desktop);
+    }
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: var(--tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--color-text-primary);
+  }
+
+  .display-heading {
+    font-family: var(--font-display);
+    font-weight: var(--weight-display);
+    line-height: var(--leading-heading);
+    letter-spacing: -0.01em;
+  }
+  .display-heading .accent {
+    display: block;
+    font-family: var(--font-display-italic);
+    font-style: italic;
+    font-weight: 500;
+  }
+
+  .body-copy {
+    font-family: var(--font-body);
+    font-weight: var(--weight-body);
+    line-height: var(--leading-body);
+    color: var(--color-text-primary);
+  }
+  .body-copy a {
+    text-decoration: underline;
+  }
+
+  .button-primary,
+  .button-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: var(--button-height);
+    padding-inline: 1.75rem;
+    border-radius: var(--radius-pill);
+    font-family: var(--font-body);
+    font-weight: 600;
+    letter-spacing: var(--tracking-button);
+    white-space: nowrap;
+    transition:
+      background-color var(--duration-hover) var(--easing-standard),
+      color var(--duration-hover) var(--easing-standard),
+      border-color var(--duration-hover) var(--easing-standard);
+  }
+  .button-primary:focus-visible,
+  .button-secondary:focus-visible {
+    border-radius: var(--radius-pill);
+  }
+
+  .button-primary {
+    background: var(--color-primary-orange);
+    color: var(--color-white);
+    border: 1px solid var(--color-primary-orange);
+  }
+  .button-primary:hover {
+    background: var(--color-terracotta);
+    border-color: var(--color-terracotta);
+  }
+
+  .button-secondary {
+    background: transparent;
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-text-primary);
+  }
+  .button-secondary:hover {
+    background: var(--color-text-primary);
+    color: var(--color-white);
+  }
+
+  .field-control {
+    display: block;
+    width: 100%;
+    height: var(--input-height);
+    padding-inline: 1rem;
+    border-radius: 10px;
+    border: 1px solid var(--color-border-subtle);
+    background: var(--color-white);
+    color: var(--color-text-primary);
+    font-family: var(--font-body);
+    transition: border-color var(--duration-hover) var(--easing-standard);
+  }
+  .field-control:focus-visible {
+    border-color: var(--color-primary-orange);
+    border-radius: 10px;
+  }
+
+  .warm-card {
+    background: var(--color-white);
+    border-radius: var(--radius-card);
+    padding: var(--card-padding);
+    border: 1px solid var(--color-border-subtle);
+  }
+
+  .pill-label {
+    display: inline-flex;
+    align-items: center;
+    padding-inline: 0.875rem;
+    padding-block: 0.375rem;
+    border-radius: var(--radius-pill);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: var(--tracking-eyebrow);
+    text-transform: uppercase;
+  }
+}

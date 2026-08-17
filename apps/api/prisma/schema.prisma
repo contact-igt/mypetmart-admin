@@ -1,0 +1,12 @@
+// MyPetMart API — Prisma schema.
+// M0 foundation only: datasource + generator wiring, no models yet.
+// Schema/migrations land in M1 per docs/PROJECT_BRIEF.md's module plan.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
