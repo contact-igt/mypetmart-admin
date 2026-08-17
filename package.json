@@ -7,6 +7,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "build": "next build",
     "dev": "next dev -p 4000",
     "dev:web": "pnpm --filter @mypetmart/web dev",
     "build:web": "pnpm --filter @mypetmart/web build",
