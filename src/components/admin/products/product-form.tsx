@@ -147,9 +147,12 @@ export function ProductForm({ productId }: { productId?: string }) {
         if (message && !next.variants) next.variants = `Variant ${index + 1}: ${message}`;
       });
     }
-    if (form.weightGrams.trim() && (!Number.isInteger(Number(form.weightGrams)) || Number(form.weightGrams) <= 0)) next.weightGrams = "Weight must be a positive whole number.";
+    const requireShipping = requestedStatus === "active" && form.productType === "simple";
+    if (requireShipping && !form.weightGrams.trim()) next.weightGrams = "Weight is required before activation.";
+    else if (form.weightGrams.trim() && (!Number.isInteger(Number(form.weightGrams)) || Number(form.weightGrams) <= 0)) next.weightGrams = "Weight must be a positive whole number.";
     (["lengthCm", "widthCm", "heightCm"] as const).forEach((field) => {
-      if (form[field].trim() && (!SHIPPING_PATTERN.test(form[field].trim()) || Number(form[field]) <= 0)) next[field] = "Use a positive value with no more than 2 decimal places.";
+      if (requireShipping && !form[field].trim()) next[field] = "Required before activation.";
+      else if (form[field].trim() && (!SHIPPING_PATTERN.test(form[field].trim()) || Number(form[field]) <= 0)) next[field] = "Use a positive value with no more than 2 decimal places.";
     });
     if (pendingImages.some((image) => !image.alt.trim())) next.images = "Alt text is required for every selected image.";
     return next;

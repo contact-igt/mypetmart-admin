@@ -25,6 +25,10 @@ const TONE_CLASSES: Record<string, string> = {
   approved: "bg-mint-sage text-text-primary",
   rejected: "bg-terracotta/15 text-terracotta",
   resolved: "bg-primary-orange/15 text-primary-orange",
+  // refund statuses
+  succeeded: "bg-mint-sage text-text-primary",
+  stock_unavailable: "bg-yellow-card text-text-primary",
+  completed: "bg-primary-orange/15 text-primary-orange",
 };
 
 export function StatusBadge({ status }: { status: string }) {

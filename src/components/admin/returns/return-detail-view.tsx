@@ -2,45 +2,54 @@
 
 import Link from "next/link";
 import { useCallback, useState } from "react";
-import { adminRepository } from "@/data/admin/mock-repository";
-import type { ReturnStatus } from "@/data/admin/types";
+import { addAdminReturnNote, getAdminReturn, initiateAdminRefund, recheckAdminRefund, reviewAdminReturn, updateAdminReplacement } from "@/lib/api/admin-return-api";
+import { useAdminAuth } from "@/context/admin-auth-context";
 import { useAdminData } from "../ui/use-admin-data";
 import { LoadingState, ErrorState } from "../ui/empty-state";
 import { StatusBadge } from "../ui/status-badge";
 import { useToast } from "../ui/toast";
-import { ImagePlaceholder } from "@/components/image-placeholder";
 import { ArrowRightIcon } from "@/components/icons";
 
-const STATUSES: ReturnStatus[] = ["requested", "approved", "rejected", "resolved"];
-
-function formatDateTime(iso: string): string {
+function formatDateTime(iso: string | null): string {
+  if (!iso) return "—";
   return new Date(iso).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+const REFUND_STATUS_COPY: Record<string, string> = {
+  pending: "Refund initiated — awaiting confirmation from PayU.",
+  processing: "PayU has queued this refund for processing.",
+  succeeded: "Refund completed and confirmed by PayU.",
+  failed: "Refund attempt failed — see failure detail below."
+};
+
 export function ReturnDetailView({ returnId }: { returnId: string }) {
   const { showToast } = useToast();
-  const fetcher = useCallback(() => adminRepository.getReturn(returnId), [returnId]);
+  const { user } = useAdminAuth();
+  const isSuperAdmin = user?.role === "super_admin";
+
+  const fetcher = useCallback(() => getAdminReturn(returnId), [returnId]);
   const { data: request, loading, error, reload } = useAdminData(fetcher);
 
-  const [nextStatus, setNextStatus] = useState<ReturnStatus | "">("");
-  const [resolutionNote, setResolutionNote] = useState("");
-  const [updating, setUpdating] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewNote, setReviewNote] = useState("");
   const [note, setNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
+  const [initiatingRefund, setInitiatingRefund] = useState(false);
+  const [recheckingRefundId, setRecheckingRefundId] = useState<number | null>(null);
+  const [updatingReplacement, setUpdatingReplacement] = useState(false);
 
-  async function handleUpdate() {
-    if (!nextStatus || !request) return;
-    setUpdating(true);
+  async function handleReview(action: "approve" | "reject") {
+    if (!request) return;
+    setReviewing(true);
     try {
-      await adminRepository.updateReturnStatus(request.id, nextStatus, resolutionNote.trim() || undefined);
-      showToast(`Marked as ${nextStatus}.`);
-      setNextStatus("");
-      setResolutionNote("");
+      await reviewAdminReturn(request.id, action, reviewNote.trim() || undefined);
+      showToast(action === "approve" ? "Return approved." : "Return rejected.");
+      setReviewNote("");
       reload();
-    } catch {
-      showToast("Could not update this request.", "error");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Could not update this request.", "error");
     } finally {
-      setUpdating(false);
+      setReviewing(false);
     }
   }
 
@@ -49,7 +58,7 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
     if (!note.trim() || !request) return;
     setAddingNote(true);
     try {
-      await adminRepository.addReturnNote(request.id, note.trim());
+      await addAdminReturnNote(request.id, note.trim());
       setNote("");
       reload();
     } catch {
@@ -59,8 +68,52 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
     }
   }
 
+  async function handleInitiateRefund() {
+    if (!request) return;
+    setInitiatingRefund(true);
+    try {
+      await initiateAdminRefund(request.id);
+      showToast("Refund initiated with PayU.");
+      reload();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Could not initiate the refund.", "error");
+    } finally {
+      setInitiatingRefund(false);
+    }
+  }
+
+  async function handleRecheckRefund(refundId: number) {
+    setRecheckingRefundId(refundId);
+    try {
+      const result = await recheckAdminRefund(refundId);
+      showToast(`Refund status: ${result.status}.`);
+      reload();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Could not re-check this refund.", "error");
+    } finally {
+      setRecheckingRefundId(null);
+    }
+  }
+
+  async function handleReplacementStatus(status: "processing" | "completed") {
+    if (!request) return;
+    setUpdatingReplacement(true);
+    try {
+      await updateAdminReplacement(request.id, status);
+      showToast(status === "completed" ? "Replacement completed." : "Replacement inventory allocated.");
+      reload();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Could not update the replacement.", "error");
+    } finally {
+      setUpdatingReplacement(false);
+    }
+  }
+
   if (loading) return <LoadingState label="Loading request…" />;
   if (error || !request) return <ErrorState message={error ?? "Request not found."} onRetry={reload} />;
+
+  const canReview = request.status === "requested";
+  const canInitiateRefund = request.resolution === "refund" && request.status === "approved" && !request.refunds.some((r) => r.status === "pending" || r.status === "processing" || r.status === "succeeded");
 
   return (
     <div className="flex flex-col gap-5">
@@ -69,15 +122,15 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
           <Link href="/admin/returns" className="text-xs font-semibold text-primary-orange hover:underline">
             &larr; Back to returns
           </Link>
-          <h1 className="mt-1 text-xl font-bold text-text-primary capitalize">
-            {request.type} — {request.productName}
+          <h1 className="mt-1 text-xl font-bold text-text-primary">
+            {request.returnNumber} — {request.productName}
           </h1>
           <p className="mt-1 text-sm text-text-primary/60">
             Order{" "}
             <Link href={`/admin/orders/${request.orderId}`} className="font-medium text-primary-orange hover:underline">
               {request.orderNumber}
             </Link>{" "}
-            · {request.customerName} · requested {formatDateTime(request.requestedAt)}
+            · {request.variantName ? `${request.variantName} · ` : ""}Purchased {request.purchasedQuantity} · Requested {request.quantity} · {request.resolution} · {formatDateTime(request.requestedAt)}
           </p>
         </div>
         <StatusBadge status={request.status} />
@@ -91,58 +144,128 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
           </div>
 
           <div className="rounded-xl border border-border-subtle bg-white p-5">
-            <h2 className="text-sm font-semibold text-text-primary">Evidence</h2>
-            {request.evidenceImageLabel ? (
-              <div className="mt-3 max-w-xs">
-                <ImagePlaceholder label={request.evidenceImageLabel} tone="cream" className="aspect-square w-full" />
+            <h2 className="text-sm font-semibold text-text-primary">Review</h2>
+            <p className="mt-1 text-xs text-text-primary/50">
+              {request.resolution === "replacement"
+                ? "Approving allocates the same product/variant from inventory. It never creates a refund or calls PayU."
+                : "Approving does not trigger a refund by itself — refund initiation is a separate, deliberate action below."}
+            </p>
+            {request.resolutionNote && <p className="mt-3 rounded-lg bg-cream-bg px-3 py-2 text-sm text-text-primary">{request.resolutionNote}</p>}
+            {canReview ? (
+              <div className="mt-3 flex flex-col gap-2">
+                <textarea
+                  value={reviewNote}
+                  onChange={(e) => setReviewNote(e.target.value)}
+                  rows={2}
+                  placeholder="Review note (optional, shown to the customer)…"
+                  className="resize-none rounded-lg border border-border-subtle bg-white px-3 py-2 text-sm focus-visible:border-primary-orange"
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleReview("approve")}
+                    disabled={reviewing}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary-orange px-3.5 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                  >
+                    {reviewing ? "Working…" : request.resolution === "replacement" ? "Approve Replacement" : "Approve Refund Request"} <ArrowRightIcon width={13} height={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleReview("reject")}
+                    disabled={reviewing}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle px-3.5 py-2 text-sm font-semibold text-text-primary hover:bg-cream-bg disabled:opacity-50"
+                  >
+                    Reject
+                  </button>
+                </div>
               </div>
             ) : (
-              <p className="mt-2 text-sm text-text-primary/50">No photo evidence was submitted with this request.</p>
+              <p className="mt-3 text-xs text-text-primary/50">This request has already been reviewed and cannot be reviewed again.</p>
             )}
           </div>
 
-          <div className="rounded-xl border border-border-subtle bg-white p-5">
-            <h2 className="text-sm font-semibold text-text-primary">Resolution</h2>
-            <p className="mt-1 text-xs text-text-primary/50">
-              Manual review only — approving or resolving here does not trigger a refund or pickup; those remain
-              outside this demo&apos;s scope.
-            </p>
-            {request.resolutionNote && (
-              <p className="mt-3 rounded-lg bg-cream-bg px-3 py-2 text-sm text-text-primary">{request.resolutionNote}</p>
+          {request.resolution === "refund" && <div className="rounded-xl border border-border-subtle bg-white p-5">
+            <h2 className="text-sm font-semibold text-text-primary">Refund</h2>
+            <p className="mt-1 text-xs text-text-primary/50">Maximum refundable amount: ₹{request.maxRefundableAmount}</p>
+
+            {request.refunds.length === 0 && !canInitiateRefund && (
+              <p className="mt-3 text-xs text-text-primary/50">
+                {!isSuperAdmin ? "Only a Super Admin can initiate a refund." : "The return must be approved before a refund can be initiated."}
+              </p>
             )}
-            <div className="mt-3 flex flex-col gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={nextStatus}
-                  onChange={(e) => setNextStatus(e.target.value as ReturnStatus)}
-                  aria-label="New request status"
-                  className="h-9 rounded-lg border border-border-subtle bg-white px-3 text-sm focus-visible:border-primary-orange"
-                >
-                  <option value="">Choose a status…</option>
-                  {STATUSES.filter((s) => s !== request.status).map((s) => (
-                    <option key={s} value={s}>
-                      {s[0].toUpperCase() + s.slice(1)}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={handleUpdate}
-                  disabled={!nextStatus || updating}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary-orange px-3.5 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
-                >
-                  {updating ? "Updating…" : "Update"} <ArrowRightIcon width={13} height={13} />
-                </button>
+
+            {request.refunds.map((refund) => (
+              <div key={refund.id} className="mt-3 rounded-lg border border-border-subtle bg-cream-bg p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-mono text-xs font-medium">{refund.refundNumber}</span>
+                  <StatusBadge status={refund.status} />
+                </div>
+                <p className="mt-1 text-sm text-text-primary">₹{refund.amount}</p>
+                <p className="mt-1 text-xs text-text-primary/60">{REFUND_STATUS_COPY[refund.status]}</p>
+                {refund.failureMessage && <p className="mt-1 text-xs text-terracotta">{refund.failureMessage}</p>}
+                <p className="mt-1 text-[11px] text-text-primary/45">
+                  Initiated {formatDateTime(refund.initiatedAt)}
+                  {refund.completedAt ? ` · Completed ${formatDateTime(refund.completedAt)}` : ""}
+                </p>
+                {(refund.status === "pending" || refund.status === "processing") && isSuperAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => handleRecheckRefund(refund.id)}
+                    disabled={recheckingRefundId === refund.id}
+                    className="mt-2 rounded-lg border border-border-subtle px-3 py-1.5 text-xs font-semibold text-text-primary hover:bg-white disabled:opacity-50"
+                  >
+                    {recheckingRefundId === refund.id ? "Checking…" : "Check Again"}
+                  </button>
+                )}
               </div>
-              <textarea
-                value={resolutionNote}
-                onChange={(e) => setResolutionNote(e.target.value)}
-                rows={2}
-                placeholder="Resolution note (optional, shown to future reviewers)…"
-                className="resize-none rounded-lg border border-border-subtle bg-white px-3 py-2 text-sm focus-visible:border-primary-orange"
-              />
+            ))}
+            {isSuperAdmin && canInitiateRefund && (
+              <button
+                type="button"
+                onClick={handleInitiateRefund}
+                disabled={initiatingRefund}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-primary-orange px-3.5 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              >
+                {initiatingRefund ? "Initiating…" : request.refunds.length > 0 ? "Retry Refund" : "Initiate Refund"} <ArrowRightIcon width={13} height={13} />
+              </button>
+            )}
+          </div>}
+
+          {request.resolution === "replacement" && (
+            <div className="rounded-xl border border-border-subtle bg-white p-5">
+              <h2 className="text-sm font-semibold text-text-primary">Replacement</h2>
+              {!request.replacement && <p className="mt-2 text-xs text-text-primary/50">Approve this request to check and allocate replacement inventory.</p>}
+              {request.replacement && (
+                <div className="mt-3 rounded-lg border border-border-subtle bg-cream-bg p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-mono text-xs font-medium">{request.replacement.replacementNumber}</span>
+                    <StatusBadge status={request.replacement.status} />
+                  </div>
+                  <p className="mt-2 text-xs text-text-primary/60">Same product and variant · Qty {request.replacement.quantity}</p>
+                  {request.replacement.status === "stock_unavailable" && (
+                    <button
+                      type="button"
+                      onClick={() => handleReplacementStatus("processing")}
+                      disabled={updatingReplacement}
+                      className="mt-3 rounded-lg bg-primary-orange px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {updatingReplacement ? "Checking…" : "Retry Stock Allocation"}
+                    </button>
+                  )}
+                  {request.replacement.status === "processing" && (
+                    <button
+                      type="button"
+                      onClick={() => handleReplacementStatus("completed")}
+                      disabled={updatingReplacement}
+                      className="mt-3 rounded-lg bg-primary-orange px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {updatingReplacement ? "Updating…" : "Mark Replacement Complete"}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
+          )}
         </div>
 
         <div className="rounded-xl border border-border-subtle bg-white p-5">
@@ -153,7 +276,7 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
               <li key={n.id} className="rounded-lg bg-cream-bg px-3 py-2 text-sm">
                 <p className="text-text-primary">{n.message}</p>
                 <p className="mt-1 text-xs text-text-primary/45">
-                  {n.author} · {formatDateTime(n.createdAt)}
+                  {n.authorName} · {formatDateTime(n.createdAt)}
                 </p>
               </li>
             ))}

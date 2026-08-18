@@ -1,8 +1,18 @@
 # MyPetMart — Project Status
 
-Last updated: 2026-08-04 (Admin Orders & Fulfilment refined — 7-state order status with validated transitions, fulfilment/payment tracking, bulk actions)
+Last updated: 2026-08-17 (Returns + Refunds shipped end-to-end — item-level Return Requests, Admin approve/reject, Refund domain model, PayU V1 refund initiation/reconciliation, storefront + admin UI. See `docs/DECISIONS.md` D015/D016 and the full implementation report delivered 2026-08-17.)
 
 ---
+
+## Returns + Refunds (2026-08-17)
+
+Status: **Implemented and tested, live on the real backend for both storefront and admin.**
+
+- Backend: `refunds` table + Refund model, `return_requests.quantity` (item-level partial returns), `RefundFinalizationService` (mirrors `PaymentFinalizationService`'s lock/monotonicity pattern), PayU V1 refund client (`cancel_refund_transaction` / `check_action_status_txnid`, verified against live docs.payu.in 2026-08-17), refund webhook that re-verifies via the Status API rather than trusting its own payload. `partially_refunded` added to the shared payment-status enum.
+- Storefront (`mypetmart-frontend`): `/account/returns` list + detail, inline "Request Return" form on delivered order items, refund status display.
+- Admin (`mypetmart-admin` root `src/`): `/admin/returns` list/detail now hit the real backend (previously mock-only, and previously had an id-type contract mismatch with the Order→Return link — both fixed). Refund initiation gated to `super_admin` via `authorize.middleware.ts` (previously unused).
+- 45 new backend tests (eligibility, concurrency, RBAC, refund idempotency/amount-authority, PayU client contract, finalization monotonicity/security) — all passing. Full existing suite (614 tests) re-verified for regressions.
+- Replacement flow: **not implemented** — explicitly out of scope for this task.
 
 ## Completed foundation work
 
