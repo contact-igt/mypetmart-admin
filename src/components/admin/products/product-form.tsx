@@ -6,6 +6,7 @@ import { fetchAdminCategories } from "@/lib/api/admin-category-api";
 import { AdminApiError } from "@/lib/api/admin-api-client";
 import type { Category } from "@/data/admin/types";
 import {
+  attachAdminProductImageFromGallery,
   createAdminProduct,
   describeAdminError,
   duplicateAdminProduct,
@@ -30,7 +31,7 @@ import { CloseIcon, CopyIcon } from "@/components/icons";
 
 type FormState = {
   productType: "simple" | "variant";
-  name: string; slug: string; sku: string; description: string; categoryId: string;
+  name: string; slug: string; sku: string; brand: string; description: string; categoryId: string;
   petType: PetType; status: ProductStatus; featured: boolean;
   price: string; compareAtPrice: string; stock: string;
   weightGrams: string; lengthCm: string; widthCm: string; heightCm: string;
@@ -38,7 +39,7 @@ type FormState = {
 };
 
 const EMPTY_FORM: FormState = {
-  productType: "simple", name: "", slug: "", sku: "", description: "", categoryId: "",
+  productType: "simple", name: "", slug: "", sku: "", brand: "", description: "", categoryId: "",
   petType: "all", status: "draft", featured: false, price: "", compareAtPrice: "", stock: "0",
   weightGrams: "", lengthCm: "", widthCm: "", heightCm: "", tags: [], metaTitle: "", metaDescription: "",
 };
@@ -46,7 +47,7 @@ const EMPTY_FORM: FormState = {
 function fromProduct(product: ProductDetail): FormState {
   return {
     productType: product.hasVariants ? "variant" : "simple", name: product.name ?? "", slug: product.slug ?? "",
-    sku: product.sku ?? "", description: product.description ?? "", categoryId: String(product.categoryId), petType: product.petType,
+    sku: product.sku ?? "", brand: product.brand ?? "", description: product.description ?? "", categoryId: String(product.categoryId), petType: product.petType,
     status: product.status, featured: Boolean(product.featured), price: product.price ?? "", compareAtPrice: product.compareAtPrice ?? "",
     stock: String(product.stock ?? 0), weightGrams: product.weightGrams == null ? "" : String(product.weightGrams),
     lengthCm: product.lengthCm ?? "", widthCm: product.widthCm ?? "", heightCm: product.heightCm ?? "",
@@ -161,7 +162,7 @@ export function ProductForm({ productId }: { productId?: string }) {
   function payload() {
     return {
       categoryId: Number(form.categoryId), name: form.name.trim(),
-      sku: form.sku.trim(), description: form.description.trim(), petType: form.petType,
+      sku: form.sku.trim(), brand: nullableDecimal(form.brand), description: form.description.trim(), petType: form.petType,
       ...(form.productType === "simple" ? { price: form.price, compareAtPrice: nullableDecimal(form.compareAtPrice), stock: Number(form.stock) } : {}),
       featured: form.featured, tags: form.tags, metaTitle: nullableDecimal(form.metaTitle), metaDescription: nullableDecimal(form.metaDescription),
       weightGrams: nullableInteger(form.weightGrams), lengthCm: nullableDecimal(form.lengthCm), widthCm: nullableDecimal(form.widthCm), heightCm: nullableDecimal(form.heightCm),
@@ -193,11 +194,24 @@ export function ProductForm({ productId }: { productId?: string }) {
         const created = await createAdminProduct({ ...payload(), status: requestedStatus, hasVariants: form.productType === "variant", variants: form.productType === "variant" ? variantDrafts.map(variantToInput) : undefined });
         let failedUploads = 0;
         for (const image of pendingImages) {
-          try { await uploadAdminProductImage(created.id, image.file, { alt: image.alt, isPrimary: image.isPrimary }); URL.revokeObjectURL(image.previewUrl); }
-          catch (cause) { failedUploads += 1; showToast(`Product created, but “${image.file.name}” was not attached: ${describeAdminError(cause, "upload failed")}`, "error"); }
+          try {
+            if (image.source === "file") {
+              await uploadAdminProductImage(created.id, image.file, { alt: image.alt, isPrimary: image.isPrimary });
+              URL.revokeObjectURL(image.previewUrl);
+            } else {
+              // Reuses the same attach-from-gallery call Product Edit uses — the Media Asset is
+              // already in Cloudflare R2, so this never re-uploads or presigns anything.
+              await attachAdminProductImageFromGallery(created.id, { mediaAssetId: image.mediaAssetId, alt: image.alt, isPrimary: image.isPrimary });
+            }
+          }
+          catch (cause) {
+            failedUploads += 1;
+            const label = image.source === "file" ? `“${image.file.name}”` : "the Media Gallery image";
+            showToast(`Product created, but ${label} was not attached: ${describeAdminError(cause, "operation failed")}`, "error");
+          }
         }
         if (failedUploads) {
-          showToast(`Product created. ${failedUploads} image upload${failedUploads === 1 ? "" : "s"} need retry from Edit.`, "error");
+          showToast(`Product created. ${failedUploads} image${failedUploads === 1 ? "" : "s"} need retry from Edit.`, "error");
           router.push(`/admin/products/${created.id}/edit`);
         } else {
           showToast(requestedStatus === "active" ? "Product created and published." : "Product saved as draft.");
@@ -244,6 +258,7 @@ export function ProductForm({ productId }: { productId?: string }) {
     <section className="rounded-xl border border-border-subtle bg-white p-4 sm:p-5"><h2 className="mb-4 text-sm font-semibold">Product type</h2>{isEditing ? <div className="rounded-lg bg-cream-bg/60 p-3"><strong>{form.productType === "variant" ? "Variant Product" : "Simple Product"}</strong><p className="mt-1 text-xs text-text-primary/55">Product type is immutable after creation.</p></div> : <div className="grid gap-3 sm:grid-cols-2">{([['simple','Simple Product','One price and inventory value.'],['variant','Variant Product','Price, stock, and optional shipping overrides per Variant.']] as const).map(([value,label,hint]) => <label key={value} className={`rounded-lg border p-4 ${form.productType === value ? "border-primary-orange bg-primary-orange/5" : "border-border-subtle"}`}><input type="radio" name="productType" value={value} checked={form.productType === value} onChange={() => { update("productType", value); if (value === "variant" && variantDrafts.length === 0) setVariantDrafts([blankVariant()]); }} className="mr-2" /><strong className="text-sm">{label}</strong><p className="ml-6 mt-1 text-xs text-text-primary/55">{hint}</p></label>)}</div>}</section>
     <section className="rounded-xl border border-border-subtle bg-white p-4 sm:p-5"><h2 className="mb-4 text-sm font-semibold">Basic information</h2><div className="grid gap-4 sm:grid-cols-2">
       <div className="sm:col-span-2"><FormField label="Product name" htmlFor="p-name" error={errors.name} hint="Enter the customer-facing Product name manually."><input id="p-name" value={form.name} onChange={(e) => update("name",e.target.value)} aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? "p-name-error" : "p-name-hint"} className={ADMIN_INPUT_CLASS} /></FormField></div>
+      <div className="sm:col-span-2"><FormField label="Brand" htmlFor="p-brand" optional hint="Optional. Enter the product manufacturer or brand."><input id="p-brand" value={form.brand} onChange={(e) => update("brand",e.target.value)} placeholder="Royal Canin" className={ADMIN_INPUT_CLASS} /></FormField></div>
       <FormField label="Slug" htmlFor="p-slug" hint={isEditing ? "Existing Product URLs remain stable when the name changes." : "Generated automatically from the Product name."}><input id="p-slug" value={slugPreview} readOnly aria-readonly="true" className={`${ADMIN_INPUT_CLASS} cursor-not-allowed bg-cream-bg/60 text-text-primary/65`} /></FormField>
       <FormField label={form.productType === "variant" ? "Master SKU" : "SKU"} htmlFor="p-sku" error={errors.sku} hint={form.productType === "variant" ? "Enter the business-controlled master SKU manually. Purchasable SKUs belong to Variants." : "Enter the business-controlled SKU manually. It must be unique."}><input id="p-sku" maxLength={100} value={form.sku} onChange={(e) => update("sku",e.target.value)} aria-invalid={Boolean(errors.sku)} aria-describedby={errors.sku ? "p-sku-error" : "p-sku-hint"} className={ADMIN_INPUT_CLASS} /></FormField>
       <div className="sm:col-span-2"><FormField label="Description" htmlFor="p-description" error={errors.description}><textarea id="p-description" rows={4} value={form.description} onChange={(e) => update("description",e.target.value)} aria-invalid={Boolean(errors.description)} aria-describedby={errors.description ? "p-description-error" : undefined} className={`${ADMIN_INPUT_CLASS} resize-y`} /></FormField></div>

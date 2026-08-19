@@ -11,6 +11,7 @@ export function Drawer({
   children,
   side = "right",
   tone = "light",
+  maxWidthClassName = "max-w-sm",
 }: {
   open: boolean;
   onClose: () => void;
@@ -20,6 +21,7 @@ export function Drawer({
   /** "dark" matches the admin sidebar's bg-deep-brown — use when the
    *  drawer's content (e.g. AdminNavList) is styled for a dark surface. */
   tone?: "light" | "dark";
+  maxWidthClassName?: string;
 }) {
   const panelRef = useFocusTrap(open, onClose);
 
@@ -42,7 +44,7 @@ export function Drawer({
         aria-modal="true"
         aria-labelledby="admin-drawer-title"
         tabIndex={-1}
-        className={`absolute top-0 ${sideClass} flex h-full w-full max-w-sm flex-col shadow-2xl ${
+        className={`absolute top-0 ${sideClass} flex h-full w-full ${maxWidthClassName} flex-col shadow-2xl ${
           isDark ? "bg-deep-brown" : "bg-white"
         }`}
       >
