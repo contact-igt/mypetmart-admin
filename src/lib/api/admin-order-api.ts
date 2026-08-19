@@ -1,4 +1,5 @@
 import { adminApiRequest } from "@/lib/api/admin-api-client";
+import type { Shipment } from "@/lib/api/admin-shipment-api";
 
 /**
  * Production Order types — mirror backend/src/models/OrderModels/order.types.ts
@@ -80,16 +81,7 @@ export type OrderPayment = {
   createdAt: string;
 };
 
-export type OrderShipment = {
-  id: number;
-  method: string;
-  carrier: string | null;
-  trackingNumber: string | null;
-  status: string;
-  shippedAt: string | null;
-  deliveredAt: string | null;
-  createdAt: string;
-};
+export type OrderShipment = Shipment;
 
 export type OrderNote = {
   id: number;
@@ -124,6 +116,7 @@ export type AdminOrderDetail = AdminOrderListItem & {
   shipments: OrderShipment[];
   notes: OrderNote[];
   returns: OrderReturn[];
+  shipment?: Shipment | null;
 };
 
 export type AdminOrderSummary = {

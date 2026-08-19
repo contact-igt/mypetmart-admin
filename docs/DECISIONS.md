@@ -200,3 +200,47 @@ drift CLAUDE.md's UI lock section prohibits.
 **Reason:** Keeps every visual value traceable to a specific, labelled
 source in `DESIGN_SYSTEM.md` rather than allowing implementation-time
 guesses to silently harden into "confirmed" values.
+
+---
+
+## 2026-08-17
+
+### D015 — Returns + Refunds approved; "automated refunds" exclusion lifted for admin-triggered PayU refunds only
+**Decision:** Both `mypetmart-frontend/CLAUDE.md` and `mypetmart-admin/CLAUDE.md` list
+"automated refunds" under "Scope exclusions — do not build without separate
+approval," and the pre-existing Returns admin UI copy stated "no automated
+refunds or pickup workflows" in three places. On 2026-08-17 the client
+explicitly commissioned a full Returns + Refunds implementation (item-level
+return requests, admin approve/reject, Refund domain model, PayU refund
+initiation/reconciliation) via a detailed cross-repo spec. This is the
+required separate approval, recorded here.
+**Scope of the lift:** refund initiation must remain **admin/super_admin-
+triggered only** — never automatic on return approval, never a "mark
+refunded" shortcut, never automatic on every return request. This preserves
+the original intent of the exclusion (no unattended/automatic financial
+movement); only the *manual, admin-initiated* PayU refund call is now in
+scope.
+**Explicitly still excluded** (not part of this approval, unchanged from the
+original scope exclusions): return-pickup automation, replacement/exchange
+flows of any kind, automatic restock on return/refund, loyalty/wallet/COD
+refunds, dispute/chargeback workflows.
+**Reason:** Real-money PayU API integration warrants an explicit, dated
+record rather than being inferred from a chat instruction alone.
+
+### D016 — Canonical `mypetmart-admin` app tree: root `src/`
+**Decision:** `mypetmart-admin` contains three parallel copies of the admin
+app — root `src/app/admin`, `apps/admin/src`, and `apps/web/src`. Root `src/`
+is confirmed canonical: it has the complete real backend API layer
+(`src/lib/api/*` wired to the deployed Railway backend), the most recent
+build/dev activity, and `apps/admin`'s own same-day commits are mid-migration
+copies *from* root, not the reverse. `docs/STATUS.md` and
+`docs/ADMIN_PANEL_PLAN.md` describe an `apps/web`-shaped architecture that no
+longer matches reality — those docs are stale on this point.
+**Reason:** Prevents implementation work from landing in a dead/incomplete
+tree. `apps/web` (no `lib/api` at all, no real commits since 2026-08-04) and
+`apps/admin` (partial migration, 3 of 6 API client files ported) are left
+untouched by the Returns + Refunds build.
+**Follow-up (not part of this task):** `apps/admin` and `apps/web` should
+eventually be deleted or the migration finished — carrying three copies
+indefinitely will keep causing exactly this kind of "which one is real"
+confusion.
