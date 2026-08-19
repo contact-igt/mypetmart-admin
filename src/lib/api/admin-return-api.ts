@@ -62,6 +62,7 @@ export type AdminReturnListItem = {
   resolutionNote: string | null;
   requestedAt: string;
   resolvedAt: string | null;
+  itemReceivedAt: string | null;
   refunds: ReturnRefundSummary[];
   replacement: ReplacementSummary | null;
 };
@@ -116,6 +117,20 @@ export function reviewAdminReturn(returnId: number | string, action: "approve" |
   return adminApiRequest<AdminReturnDetail>(`${returnPath(returnId)}/review`, {
     method: "PATCH",
     body: JSON.stringify(note ? { action, note } : { action })
+  });
+}
+
+/**
+ * Warehouse-side confirmation that the physical item is actually back —
+ * required before a "replacement" request can be approved, and before a
+ * "refund" request's refund can be initiated (see RETURN_ITEM_NOT_RECEIVED
+ * on the backend). An operational fact, not a money movement, so open to
+ * any admin, not just super_admin.
+ */
+export function markReturnItemReceived(returnId: number | string): Promise<AdminReturnDetail> {
+  return adminApiRequest<AdminReturnDetail>(`${returnPath(returnId)}/receive`, {
+    method: "POST",
+    body: JSON.stringify({})
   });
 }
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useState } from "react";
-import { addAdminReturnNote, getAdminReturn, initiateAdminRefund, recheckAdminRefund, reviewAdminReturn, updateAdminReplacement } from "@/lib/api/admin-return-api";
+import { addAdminReturnNote, getAdminReturn, initiateAdminRefund, markReturnItemReceived, recheckAdminRefund, reviewAdminReturn, updateAdminReplacement } from "@/lib/api/admin-return-api";
 import { useAdminAuth } from "@/context/admin-auth-context";
 import { useAdminData } from "../ui/use-admin-data";
 import { LoadingState, ErrorState } from "../ui/empty-state";
@@ -32,6 +32,7 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
   const fetcher = useCallback(() => getAdminReturn(returnId), [returnId]);
   const { data: request, loading, error, reload } = useAdminData(fetcher);
 
+  const [markingReceived, setMarkingReceived] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [reviewNote, setReviewNote] = useState("");
   const [note, setNote] = useState("");
@@ -40,6 +41,20 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
   const [recheckingRefundId, setRecheckingRefundId] = useState<number | null>(null);
   const [updatingReplacement, setUpdatingReplacement] = useState(false);
   const [creatingShipment, setCreatingShipment] = useState(false);
+
+  async function handleMarkReceived() {
+    if (!request) return;
+    setMarkingReceived(true);
+    try {
+      await markReturnItemReceived(request.id);
+      showToast("Item marked as received.");
+      reload();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Could not mark this item received.", "error");
+    } finally {
+      setMarkingReceived(false);
+    }
+  }
 
   async function handleReview(action: "approve" | "reject") {
     if (!request) return;
@@ -124,7 +139,13 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
   if (error || !request) return <ErrorState message={error ?? "Request not found."} onRetry={reload} />;
 
   const canReview = request.status === "requested";
-  const canInitiateRefund = request.resolution === "refund" && request.status === "approved" && !request.refunds.some((r) => r.status === "pending" || r.status === "processing" || r.status === "succeeded");
+  const canMarkReceived = (request.status === "requested" || request.status === "approved") && !request.itemReceivedAt;
+  const blockedByItemReceived = request.resolution === "replacement" && canReview && !request.itemReceivedAt;
+  const canInitiateRefund =
+    request.resolution === "refund" &&
+    request.status === "approved" &&
+    Boolean(request.itemReceivedAt) &&
+    !request.refunds.some((r) => r.status === "pending" || r.status === "processing" || r.status === "succeeded");
 
   return (
     <div className="flex flex-col gap-5">
@@ -155,6 +176,28 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
           </div>
 
           <div className="rounded-xl border border-border-subtle bg-white p-5">
+            <h2 className="text-sm font-semibold text-text-primary">Item Received</h2>
+            <p className="mt-1 text-xs text-text-primary/50">
+              Confirms the physical item is actually back with you. Required before a replacement can be approved, and before a refund can be
+              initiated — closes the gap where money or stock could otherwise move off a photo alone.
+            </p>
+            {request.itemReceivedAt ? (
+              <p className="mt-3 text-sm text-text-primary">Received {formatDateTime(request.itemReceivedAt)}</p>
+            ) : canMarkReceived ? (
+              <button
+                type="button"
+                onClick={handleMarkReceived}
+                disabled={markingReceived}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-primary-orange px-3.5 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              >
+                {markingReceived ? "Marking…" : "Mark Item Received"}
+              </button>
+            ) : (
+              <p className="mt-3 text-xs text-text-primary/50">Not applicable — this request has already been rejected or resolved.</p>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-border-subtle bg-white p-5">
             <h2 className="text-sm font-semibold text-text-primary">Review</h2>
             <p className="mt-1 text-xs text-text-primary/50">
               {request.resolution === "replacement"
@@ -164,6 +207,7 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
             {request.resolutionNote && <p className="mt-3 rounded-lg bg-cream-bg px-3 py-2 text-sm text-text-primary">{request.resolutionNote}</p>}
             {canReview ? (
               <div className="mt-3 flex flex-col gap-2">
+                {blockedByItemReceived && <p className="text-xs text-terracotta">Mark the item received above before approving this replacement.</p>}
                 <textarea
                   value={reviewNote}
                   onChange={(e) => setReviewNote(e.target.value)}
@@ -175,7 +219,7 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
                   <button
                     type="button"
                     onClick={() => handleReview("approve")}
-                    disabled={reviewing}
+                    disabled={reviewing || blockedByItemReceived}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-primary-orange px-3.5 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
                   >
                     {reviewing ? "Working…" : request.resolution === "replacement" ? "Approve Replacement" : "Approve Refund Request"} <ArrowRightIcon width={13} height={13} />
@@ -201,7 +245,13 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
 
             {request.refunds.length === 0 && !canInitiateRefund && (
               <p className="mt-3 text-xs text-text-primary/50">
-                {!isSuperAdmin ? "Only a Super Admin can initiate a refund." : "The return must be approved before a refund can be initiated."}
+                {!isSuperAdmin
+                  ? "Only a Super Admin can initiate a refund."
+                  : request.status !== "approved"
+                    ? "The return must be approved before a refund can be initiated."
+                    : !request.itemReceivedAt
+                      ? "Mark the item received above before a refund can be initiated."
+                      : "A refund is already in progress or completed."}
               </p>
             )}
 
