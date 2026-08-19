@@ -1,5 +1,6 @@
 import {
   GridIcon,
+  GridViewIcon,
   BoxIcon,
   TagIcon,
   ReceiptIcon,
@@ -31,6 +32,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     items: [
       { label: "Products", href: "/admin/products", icon: BoxIcon },
       { label: "Categories", href: "/admin/categories", icon: TagIcon },
+      { label: "Media Gallery", href: "/admin/gallery", icon: GridViewIcon },
     ],
   },
   {

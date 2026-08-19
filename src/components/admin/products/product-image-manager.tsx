@@ -4,6 +4,7 @@
 import { useRef, useState } from "react";
 import { AdminApiError } from "@/lib/api/admin-api-client";
 import {
+  attachAdminProductImageFromGallery,
   deleteAdminProductImage,
   describeAdminError,
   reorderAdminProductImages,
@@ -13,10 +14,12 @@ import {
   type PendingProductImage,
   type ProductImage,
 } from "@/lib/api/admin-product-api";
+import type { MediaAsset } from "@/lib/api/admin-media-api";
 import { ADMIN_INPUT_CLASS } from "../ui/form-field";
 import { ConfirmDialog } from "../ui/confirm-dialog";
+import { MediaPickerDrawer } from "../gallery/media-picker-drawer";
 import { useToast } from "../ui/toast";
-import { ChevronDownIcon, TrashIcon, UploadIcon } from "@/components/icons";
+import { ChevronDownIcon, GridViewIcon, TrashIcon, UploadIcon } from "@/components/icons";
 
 function defaultAlt(filename: string): string {
   return filename.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
@@ -34,17 +37,52 @@ export function ProductImageManager({ productId, images = [], pending, onPending
   const [ordered, setOrdered] = useState(images);
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState("");
-  const [retryTask, setRetryTask] = useState<PendingProductImage | null>(null);
+  const [retryTask, setRetryTask] = useState<Extract<PendingProductImage, { source: "file" }> | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProductImage | null>(null);
+  const [galleryOpen, setGalleryOpen] = useState(false);
   const [altDrafts, setAltDrafts] = useState<Record<number, string>>(
     () => Object.fromEntries(images.map((image) => [image.id, image.alt])),
   );
 
-  function makeTask(file: File, isPrimary: boolean): PendingProductImage {
-    return { key: `${file.name}-${file.lastModified}-${Math.random()}`, file, alt: defaultAlt(file.name), previewUrl: URL.createObjectURL(file), isPrimary };
+  async function attachFromGallery(asset: MediaAsset) {
+    if (!productId) return;
+    setBusy(true);
+    try {
+      await attachAdminProductImageFromGallery(productId, { mediaAssetId: asset.id, alt: asset.altText ?? undefined, isPrimary: ordered.length === 0 });
+      showToast("Attached from the Media Gallery.");
+      await onChanged?.();
+    } catch (cause) {
+      showToast(describeAdminError(cause, "Could not attach this Media Gallery asset."), "error");
+    } finally { setBusy(false); }
   }
 
-  async function upload(task: PendingProductImage) {
+  // Before the Product exists there is no ID to attach to yet, so a chosen
+  // Gallery asset joins the same `pending` queue as a locally-selected file
+  // (as a "gallery"-sourced entry) instead of attaching immediately. The
+  // Product form resolves each queued entry to the right call
+  // (uploadAdminProductImage vs attachAdminProductImageFromGallery) once the
+  // Product is created — see product-form.tsx's save().
+  function selectGalleryAsset(asset: MediaAsset) {
+    if (productId) { void attachFromGallery(asset); return; }
+    const alt = asset.altText || asset.title || asset.originalName;
+    onPendingChange([...pending, { source: "gallery", key: `gallery-${asset.id}-${Math.random()}`, mediaAssetId: asset.id, alt, previewUrl: asset.url, isPrimary: pending.length === 0 }]);
+  }
+
+  function makeTask(file: File, isPrimary: boolean): Extract<PendingProductImage, { source: "file" }> {
+    return { source: "file", key: `${file.name}-${file.lastModified}-${Math.random()}`, file, alt: defaultAlt(file.name), previewUrl: URL.createObjectURL(file), isPrimary };
+  }
+
+  // Spreading `...item` where item is a discriminated union doesn't narrow
+  // cleanly through TypeScript's object-spread inference, so each branch
+  // narrows `item` on `source` explicitly before spreading.
+  function withAlt(item: PendingProductImage, alt: string): PendingProductImage {
+    return item.source === "file" ? { ...item, alt } : { ...item, alt };
+  }
+  function withIsPrimary(item: PendingProductImage, isPrimary: boolean): PendingProductImage {
+    return item.source === "file" ? { ...item, isPrimary } : { ...item, isPrimary };
+  }
+
+  async function upload(task: Extract<PendingProductImage, { source: "file" }>) {
     if (!productId) return;
     setBusy(true); setRetryTask(null);
     try {
@@ -115,12 +153,12 @@ export function ProductImageManager({ productId, images = [], pending, onPending
     finally { setBusy(false); }
   }
 
-  function patchPending(key: string, patch: Partial<PendingProductImage>) { onPendingChange(pending.map((image) => image.key === key ? { ...image, ...patch } : image)); }
-  function removePending(task: PendingProductImage) { URL.revokeObjectURL(task.previewUrl); onPendingChange(pending.filter((image) => image.key !== task.key)); }
+  function patchPendingAlt(key: string, alt: string) { onPendingChange(pending.map((image) => image.key === key ? withAlt(image, alt) : image)); }
+  function removePending(task: PendingProductImage) { if (task.source === "file") URL.revokeObjectURL(task.previewUrl); onPendingChange(pending.filter((image) => image.key !== task.key)); }
 
   return <section className="rounded-xl border border-border-subtle bg-white p-4 sm:p-5">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-sm font-semibold">Product images</h2><p className="mt-1 text-xs text-text-primary/50">JPEG, PNG, or WebP · maximum 5 MB · alt text required</p></div><button type="button" disabled={busy} onClick={() => inputRef.current?.click()} className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-2 text-xs font-semibold hover:bg-cream-bg disabled:opacity-50"><UploadIcon width={14} /> Select image</button><input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" multiple={!productId} onChange={(event) => selectFiles(event.target.files)} className="sr-only" aria-label="Select Product images" /></div>
-    {!productId && <p className="mt-3 rounded-lg bg-cream-bg/60 p-3 text-xs text-text-primary/65">Selected images upload directly to Cloudflare R2 after the Product is created. A Product can still be saved if an upload fails, and you can retry from Edit.</p>}
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-sm font-semibold">Product images</h2><p className="mt-1 text-xs text-text-primary/50">JPEG, PNG, or WebP · maximum 5 MB · alt text required</p></div><div className="flex gap-2"><button type="button" disabled={busy} onClick={() => setGalleryOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-2 text-xs font-semibold hover:bg-cream-bg disabled:opacity-50"><GridViewIcon width={14} /> Choose from Gallery</button><button type="button" disabled={busy} onClick={() => inputRef.current?.click()} className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-2 text-xs font-semibold hover:bg-cream-bg disabled:opacity-50"><UploadIcon width={14} /> Upload new</button></div><input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" multiple={!productId} onChange={(event) => selectFiles(event.target.files)} className="sr-only" aria-label="Select Product images" /></div>
+    {!productId && <p className="mt-3 rounded-lg bg-cream-bg/60 p-3 text-xs text-text-primary/65">Local files upload to Cloudflare R2 and Media Gallery selections are attached once the Product is created. A Product can still be saved if one fails, and you can retry from Edit.</p>}
     {busy && stage && <p role="status" className="mt-3 rounded-lg border border-primary-orange/30 bg-primary-orange/5 p-3 text-xs font-medium text-primary-orange">{stage}…</p>}
     {retryTask && <div role="alert" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-terracotta/30 bg-terracotta/5 p-3 text-xs"><span>Upload failed before attachment. The Product remains unchanged.</span><button type="button" onClick={() => upload(retryTask)} className="font-semibold text-terracotta">Retry upload</button></div>}
     {ordered.length === 0 && pending.length === 0 && <p className="mt-4 rounded-lg border border-dashed border-border-subtle p-6 text-center text-sm text-text-primary/50">No Product images yet.</p>}
@@ -130,7 +168,8 @@ export function ProductImageManager({ productId, images = [], pending, onPending
       <label className="mt-2 block text-xs font-medium">Alt text<input value={altDrafts[image.id] ?? ""} onChange={(event) => setAltDrafts((values) => ({ ...values, [image.id]: event.target.value }))} className={`${ADMIN_INPUT_CLASS} mt-1`} /></label>
       <div className="mt-2 flex justify-between gap-2"><button type="button" disabled={busy || image.isPrimary} onClick={() => setPrimary(image)} className="text-xs font-semibold text-primary-orange disabled:text-text-primary/35">Set primary</button><button type="button" disabled={busy || (altDrafts[image.id] ?? "") === image.alt} onClick={() => saveAlt(image)} className="text-xs font-semibold text-primary-orange disabled:text-text-primary/35">Save alt text</button></div>
     </article>)}</div>
-    {pending.length > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2">{pending.map((image,index) => <article key={image.key} className="rounded-lg border border-dashed border-primary-orange/40 p-3"><img src={image.previewUrl} alt={image.alt || "Pending Product image preview"} className="aspect-square w-full rounded-lg object-cover" /><p className="mt-2 text-xs font-semibold text-primary-orange">Pending upload {index + 1}</p><label className="mt-2 block text-xs font-medium">Alt text<input value={image.alt} onChange={(event) => patchPending(image.key, { alt: event.target.value })} className={`${ADMIN_INPUT_CLASS} mt-1`} /></label><div className="mt-2 flex justify-between"><label className="flex items-center gap-1 text-xs"><input type="radio" name="pending-primary" checked={image.isPrimary} onChange={() => onPendingChange(pending.map((item) => ({ ...item, isPrimary: item.key === image.key })))} /> Primary</label><button type="button" onClick={() => removePending(image)} className="text-xs font-semibold text-terracotta">Remove</button></div></article>)}</div>}
-    <ConfirmDialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} onConfirm={remove} title="Delete image?" description="This removes the Product image and deletes its Cloudflare R2 object. Deleted image metadata remains preserved by the Backend." confirmLabel="Delete image" loading={busy} />
+    {pending.length > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2">{pending.map((image,index) => <article key={image.key} className="rounded-lg border border-dashed border-primary-orange/40 p-3"><img src={image.previewUrl} alt={image.alt || "Pending Product image preview"} className="aspect-square w-full rounded-lg object-cover" /><p className="mt-2 text-xs font-semibold text-primary-orange">{image.source === "gallery" ? "From Media Gallery" : `Pending upload ${index + 1}`}</p><label className="mt-2 block text-xs font-medium">Alt text<input value={image.alt} onChange={(event) => patchPendingAlt(image.key, event.target.value)} className={`${ADMIN_INPUT_CLASS} mt-1`} /></label><div className="mt-2 flex justify-between"><label className="flex items-center gap-1 text-xs"><input type="radio" name="pending-primary" checked={image.isPrimary} onChange={() => onPendingChange(pending.map((item) => withIsPrimary(item, item.key === image.key)))} /> Primary</label><button type="button" onClick={() => removePending(image)} className="text-xs font-semibold text-terracotta">Remove</button></div></article>)}</div>}
+    <ConfirmDialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} onConfirm={remove} title="Delete image?" description={deleteTarget?.mediaAssetId ? "This removes the image from this Product only. It stays in the Media Gallery and any other Product using it is unaffected." : "This removes the Product image and deletes its Cloudflare R2 object. Deleted image metadata remains preserved by the Backend."} confirmLabel="Delete image" loading={busy} />
+    <MediaPickerDrawer open={galleryOpen} onClose={() => setGalleryOpen(false)} onSelect={selectGalleryAsset} />
   </section>;
 }

@@ -9,6 +9,7 @@ export type ProductSort = "created_at" | "price" | "name" | "stock";
 export type ProductImage = {
   id: number;
   r2Key?: string;
+  mediaAssetId: number | null;
   url: string;
   alt: string;
   contentType: string;
@@ -43,6 +44,7 @@ export type ProductListItem = {
   name: string;
   slug: string;
   sku: string;
+  brand: string | null;
   petType: PetType;
   status: ProductStatus;
   price: string;
@@ -91,6 +93,7 @@ export type ProductInput = {
   categoryId: number;
   name: string;
   sku: string;
+  brand?: string | null;
   description: string;
   petType: PetType;
   price?: string;
@@ -256,13 +259,21 @@ export function reorderAdminVariants(productId: number, orderedIds: number[]): P
   });
 }
 
-export type PendingProductImage = {
+type PendingProductImageBase = {
   key: string;
-  file: File;
   alt: string;
   previewUrl: string;
   isPrimary: boolean;
 };
+
+// A pending image queued before the Product exists (New Product page) is
+// either a local file waiting to upload, or an existing Media Gallery asset
+// waiting to be attached once the Product has an ID — see
+// attachAdminProductImageFromGallery below, which is reused as-is for the
+// gallery branch (no re-upload, no new backend endpoint).
+export type PendingProductImage =
+  | (PendingProductImageBase & { source: "file"; file: File })
+  | (PendingProductImageBase & { source: "gallery"; mediaAssetId: number });
 
 type UploadAuthorization = {
   uploadUrl: string;
@@ -340,6 +351,16 @@ export async function uploadAdminProductImage(
       isPrimary: options.isPrimary,
       ...dimensions,
     }),
+  });
+}
+
+export function attachAdminProductImageFromGallery(
+  productId: number,
+  input: { mediaAssetId: number; alt?: string; isPrimary?: boolean },
+): Promise<ProductImage> {
+  return adminApiRequest<ProductImage>(`${productPath(productId)}/images/attach-from-gallery`, {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 }
 
