@@ -9,6 +9,8 @@ import { LoadingState, ErrorState } from "../ui/empty-state";
 import { StatusBadge } from "../ui/status-badge";
 import { useToast } from "../ui/toast";
 import { ArrowRightIcon } from "@/components/icons";
+import { createReplacementShipment } from "@/lib/api/admin-shipment-api";
+import { ShipmentPanel } from "@/components/admin/shipments/shipment-panel";
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return "—";
@@ -37,6 +39,7 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
   const [initiatingRefund, setInitiatingRefund] = useState(false);
   const [recheckingRefundId, setRecheckingRefundId] = useState<number | null>(null);
   const [updatingReplacement, setUpdatingReplacement] = useState(false);
+  const [creatingShipment, setCreatingShipment] = useState(false);
 
   async function handleReview(action: "approve" | "reject") {
     if (!request) return;
@@ -95,18 +98,26 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
     }
   }
 
-  async function handleReplacementStatus(status: "processing" | "completed") {
+  async function handleReplacementStatus(status: "processing") {
     if (!request) return;
     setUpdatingReplacement(true);
     try {
       await updateAdminReplacement(request.id, status);
-      showToast(status === "completed" ? "Replacement completed." : "Replacement inventory allocated.");
+      showToast("Replacement inventory allocated.");
       reload();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Could not update the replacement.", "error");
     } finally {
       setUpdatingReplacement(false);
     }
+  }
+
+  async function handleCreateReplacementShipment() {
+    if (!request?.replacement) return;
+    setCreatingShipment(true);
+    try { await createReplacementShipment(request.replacement.id); showToast("Replacement shipment creation started."); }
+    catch (err) { showToast(err instanceof Error ? err.message : "Could not create the replacement shipment.", "error"); }
+    finally { reload(); setCreatingShipment(false); }
   }
 
   if (loading) return <LoadingState label="Loading request…" />;
@@ -252,15 +263,9 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
                       {updatingReplacement ? "Checking…" : "Retry Stock Allocation"}
                     </button>
                   )}
-                  {request.replacement.status === "processing" && (
-                    <button
-                      type="button"
-                      onClick={() => handleReplacementStatus("completed")}
-                      disabled={updatingReplacement}
-                      className="mt-3 rounded-lg bg-primary-orange px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                    >
-                      {updatingReplacement ? "Updating…" : "Mark Replacement Complete"}
-                    </button>
+                  <div className="mt-3"><ShipmentPanel shipment={request.replacement.shipment} onChanged={reload} /></div>
+                  {request.replacement.status === "processing" && !request.replacement.shipment && (
+                    <button type="button" onClick={handleCreateReplacementShipment} disabled={creatingShipment} className="mt-3 rounded-lg bg-primary-orange px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-50">{creatingShipment ? "Creating shipment…" : "Create Replacement Shipment"}</button>
                   )}
                 </div>
               )}
