@@ -37,6 +37,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     label: "Sales",
     items: [
       { label: "Orders", href: "/admin/orders", icon: ReceiptIcon },
+      { label: "Shipments", href: "/admin/shipments", icon: BoxIcon },
       { label: "Customers", href: "/admin/customers", icon: UsersIcon },
       { label: "Returns", href: "/admin/returns", icon: ReturnIcon },
     ],
@@ -88,6 +89,7 @@ export function getBreadcrumbs(pathname: string): Breadcrumb[] {
       orders: "Order detail",
       customers: "Customer detail",
       returns: "Return detail",
+      shipments: "Shipment detail",
     };
     crumbs.push({ label: detailLabel[section] ?? "Detail" });
   }

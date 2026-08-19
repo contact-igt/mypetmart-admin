@@ -10,6 +10,8 @@ import { StatusBadge } from "../ui/status-badge";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import { useToast } from "../ui/toast";
 import { MailIcon, PhoneIcon, ReturnIcon } from "@/components/icons";
+import { createOrderShipment } from "@/lib/api/admin-shipment-api";
+import { ShipmentPanel } from "@/components/admin/shipments/shipment-panel";
 
 const currency = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 });
 
@@ -55,6 +57,15 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
   // ---- internal notes ----
   const [note, setNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
+  const [creatingShipment, setCreatingShipment] = useState(false);
+
+  async function handleCreateShipment() {
+    if (!order) return;
+    setCreatingShipment(true);
+    try { await createOrderShipment(order.id); showToast("Shipment creation started."); }
+    catch (err) { showToast(err instanceof Error ? err.message : "Could not create the shipment.", "error"); }
+    finally { reload(); setCreatingShipment(false); }
+  }
 
   async function handleAddNote(event: React.FormEvent) {
     event.preventDefault();
@@ -243,20 +254,9 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
 
           <div className="rounded-xl border border-border-subtle bg-white p-5">
             <h2 className="text-sm font-semibold text-text-primary">Shipping &amp; fulfilment</h2>
-            <p className="mt-1 text-xs text-text-primary/50">Read-only — live carrier/tracking assignment is deferred to the shipping integration stage.</p>
-            {order.shipments.length === 0 ? (
-              <p className="mt-3 text-sm text-text-primary/55">No shipment created yet.</p>
-            ) : (
-              <ul className="mt-3 flex flex-col gap-2 text-sm">
-                {order.shipments.map((shipment) => (
-                  <li key={shipment.id} className="flex items-center justify-between">
-                    <span className="text-text-primary/70">
-                      {shipment.method} · {shipment.carrier ?? "Carrier not assigned"} · {shipment.trackingNumber ?? "No tracking number"}
-                    </span>
-                    <StatusBadge status={shipment.status} />
-                  </li>
-                ))}
-              </ul>
+            <div className="mt-3"><ShipmentPanel shipment={order.shipment ?? order.shipments.find((shipment) => shipment.sourceType === "order")} onChanged={reload} /></div>
+            {!order.shipment && !order.shipments.some((shipment) => shipment.sourceType === "order") && order.paymentStatus === "paid" && order.status === "confirmed" && !order.commerceException && (
+              <button type="button" onClick={handleCreateShipment} disabled={creatingShipment} className="mt-3 rounded-lg bg-primary-orange px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-50">{creatingShipment ? "Creating shipment…" : "Create shipment"}</button>
             )}
             <div className="mt-3 flex items-center justify-between border-t border-border-subtle pt-3">
               <span className="text-xs font-semibold uppercase tracking-wide text-text-primary/50">Fulfilment status</span>

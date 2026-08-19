@@ -1,4 +1,5 @@
 import { adminApiRequest } from "@/lib/api/admin-api-client";
+import type { Shipment } from "@/lib/api/admin-shipment-api";
 
 /**
  * Production Return + Refund types — mirror
@@ -23,6 +24,7 @@ export type ReplacementSummary = {
   stockConsumedAt: string | null;
   completedAt: string | null;
   createdAt: string;
+  shipment?: Shipment | null;
 };
 
 export type ReturnRefundSummary = {
@@ -143,7 +145,7 @@ export function recheckAdminRefund(refundId: number | string): Promise<InitiateR
   });
 }
 
-export function updateAdminReplacement(returnId: number | string, status: "processing" | "completed"): Promise<ReplacementSummary> {
+export function updateAdminReplacement(returnId: number | string, status: "processing"): Promise<ReplacementSummary> {
   return adminApiRequest<ReplacementSummary>(`${returnPath(returnId)}/replacement`, {
     method: "PATCH",
     body: JSON.stringify({ status })
