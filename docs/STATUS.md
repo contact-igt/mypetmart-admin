@@ -1,8 +1,23 @@
 # MyPetMart — Project Status
 
-Last updated: 2026-08-17 (Returns + Refunds shipped end-to-end — item-level Return Requests, Admin approve/reject, Refund domain model, PayU V1 refund initiation/reconciliation, storefront + admin UI. See `docs/DECISIONS.md` D015/D016 and the full implementation report delivered 2026-08-17.)
+Last updated: 2026-08-18 (Admin consolidated onto one authoritative app; after-sales migrations 035–038 applied to the dev database.)
 
 ---
+
+## Admin application (2026-08-18)
+
+**AUTHORITATIVE ADMIN:** `mypetmart-admin/` (the Next.js app under `mypetmart-admin/src/`). Real JWT auth (`/admin/login`), real backend API bindings for every module including Returns/Refunds/Replacement.
+
+**DEPRECATED ADMIN:** `mypetmart-admin/apps/admin` (package `@mypetmart/admin`). Frozen early-stage scaffold — in-memory mock repository, no real auth, no Refund feature, Replacement is a label only. Kept for reference only; see `apps/admin/DEPRECATED.md`. Do not add new features here or point deployments at it.
+
+**ADMIN DEV COMMAND:** `pnpm dev:admin` (root `package.json`) now runs the authoritative app (`next dev -p 4000` from the repo root). `pnpm build:admin` / `pnpm lint:admin` / `pnpm typecheck:admin` likewise target it. The deprecated app is still reachable, deliberately not by default, via `pnpm dev:admin-legacy` / `pnpm build:admin-legacy` / etc.
+
+**AFTER-SALES MIGRATIONS:** 035–038 (refunds table, `return_requests.quantity`, `partially_refunded` payment status, replacements table) applied to the dev database on 2026-08-18. `db:migrate:status` shows 0 pending; `db:schema:verify` passes.
+
+**RETURNS:** implemented (backend, storefront, authoritative admin).
+**REFUNDS:** implemented (backend, storefront display, authoritative admin — PayU refund initiation is code-complete and verified but requires `BACKEND_PUBLIC_ORIGIN` to actually call PayU, same as the existing payment-webhook limitation; not yet set locally).
+**REPLACEMENT:** implemented (backend, storefront, authoritative admin) — verified live end-to-end against the migrated dev database on 2026-08-18: request → approve (inventory allocated, decremented exactly once) → mark complete.
+**SHIPPING:** not implemented.
 
 ## Returns + Refunds (2026-08-17)
 
@@ -12,7 +27,7 @@ Status: **Implemented and tested, live on the real backend for both storefront a
 - Storefront (`mypetmart-frontend`): `/account/returns` list + detail, inline "Request Return" form on delivered order items, refund status display.
 - Admin (`mypetmart-admin` root `src/`): `/admin/returns` list/detail now hit the real backend (previously mock-only, and previously had an id-type contract mismatch with the Order→Return link — both fixed). Refund initiation gated to `super_admin` via `authorize.middleware.ts` (previously unused).
 - 45 new backend tests (eligibility, concurrency, RBAC, refund idempotency/amount-authority, PayU client contract, finalization monotonicity/security) — all passing. Full existing suite (614 tests) re-verified for regressions.
-- Replacement flow: **not implemented** — explicitly out of scope for this task.
+- Replacement flow: implemented in a later pass (2026-08-18) — see "Admin application (2026-08-18)" above. This line originally said "not implemented" when this section was written; corrected 2026-08-18 to match runtime truth.
 
 ## Completed foundation work
 
