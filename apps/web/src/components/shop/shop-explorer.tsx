@@ -41,18 +41,11 @@ function FilterPill({
   );
 }
 
-function AllPill({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+function AllPill({ active, onClick }: { active: boolean; onClick: () => void; label?: string }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      aria-label={`All ${label}`}
-      title={`All ${label}`}
-      className={`h-8 w-8 shrink-0 rounded-full border transition-colors duration-150 ease-out ${
-        active ? "border-deep-brown bg-deep-brown" : "border-border-subtle bg-white"
-      }`}
-    />
+    <FilterPill active={active} onClick={onClick}>
+      All
+    </FilterPill>
   );
 }
 

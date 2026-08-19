@@ -1,4 +1,4 @@
-import { ImagePlaceholder } from "@/components/image-placeholder";
+import Image from "next/image";
 import { GROOMING_BULLETS } from "./home-data";
 import { ArrowRightIcon } from "@/components/icons";
 
@@ -6,11 +6,15 @@ export function GroomingFeatureStory() {
   return (
     <section className="section-block bg-mint-sage">
       <div className="site-container grid gap-10 lg:grid-cols-2 lg:items-center lg:gap-16">
-        <ImagePlaceholder
-          label="Small dog being groomed with a mist brush, wrapped in a blanket"
-          tone="terracotta"
-          className="aspect-[6/5] w-full"
-        />
+        <div className="relative aspect-[6/5] w-full overflow-hidden rounded-[24px] shadow-sm">
+          <Image
+            src="/assest/grooming-story.jpg"
+            alt="Puppy and cat being groomed with a mist spray brush on a soft blanket"
+            fill
+            sizes="(min-width: 1024px) 50vw, 100vw"
+            className="object-cover"
+          />
+        </div>
         <div>
           <span className="eyebrow text-primary-orange">Feature story</span>
           <h2 className="display-heading mt-3 text-3xl text-text-primary sm:text-4xl">
