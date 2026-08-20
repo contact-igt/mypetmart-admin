@@ -41,7 +41,7 @@ export function OrderStatusSection({
           {recentOrders.length === 0 ? (
             <p className="py-8 text-center text-sm text-text-primary/55">No orders match the current filters.</p>
           ) : (
-            <DataTable columns={RECENT_ORDER_COLUMNS} rows={recentOrders} getRowId={(o) => o.orderId} />
+            <DataTable columns={RECENT_ORDER_COLUMNS} rows={recentOrders} getRowId={(o) => String(o.orderId)} />
           )}
         </SectionCard>
       </div>

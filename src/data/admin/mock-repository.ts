@@ -1,5 +1,4 @@
 import type { AdminRepository } from "./repository";
-import { computeDashboardAnalytics, getDashboardFilterOptions as getDashboardFilterOptionsSync } from "./dashboard-analytics";
 import {
   getValidNextFulfilmentStatuses,
   getValidNextOrderStatuses,
@@ -17,9 +16,6 @@ import type {
   Category,
   CategoryInput,
   Customer,
-  DashboardAnalyticsResult,
-  DashboardFilter,
-  DashboardFilterOptions,
   FulfilmentStatus,
   ListResult,
   Note,
@@ -94,15 +90,6 @@ class MockAdminRepository implements AdminRepository {
   private customers: Customer[] = clone(CUSTOMERS);
   private returns: ReturnRequest[] = clone(RETURNS);
   private settings: StoreSettings = clone(STORE_SETTINGS);
-
-  // ---------------------------------------------------------------- dashboard
-  async getDashboardFilterOptions(): Promise<DashboardFilterOptions> {
-    return delay(getDashboardFilterOptionsSync());
-  }
-
-  async getDashboardAnalytics(filter: DashboardFilter): Promise<DashboardAnalyticsResult> {
-    return delay(computeDashboardAnalytics(filter));
-  }
 
   // ----------------------------------------------------------------- products
   async getProductSummary(): Promise<ProductSummary> {

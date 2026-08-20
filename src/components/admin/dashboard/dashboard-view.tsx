@@ -1,33 +1,48 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { adminRepository } from "@/data/admin/mock-repository";
-import { DATASET_BOUNDS } from "@/data/admin/dashboard-analytics";
+import { getDashboardAnalytics, getDashboardFilterOptions } from "@/lib/api/admin-dashboard-api";
 import { useAdminData } from "../ui/use-admin-data";
 import { LoadingState, ErrorState, EmptyState } from "../ui/empty-state";
 import { DashboardFilterBar } from "./dashboard-filter-bar";
 import { MetricComparisonCard } from "./metric-comparison-card";
 import { SectionCard } from "./section-card";
 import { SalesOrdersChart, type SeriesMetric } from "./sales-orders-chart";
-import { ConversionFunnel } from "./conversion-funnel";
 import { OrderStatusSection } from "./order-status-section";
 import { ProductPerformanceSection } from "./product-performance-section";
-import { ProductInterestSection } from "./product-interest-section";
 import { FulfilmentSection } from "./fulfilment-section";
 import { LocationSection } from "./location-section";
 import { CustomerOverviewSection } from "./customer-overview-section";
 import { ReturnsSection } from "./returns-section";
-import { TrafficSourcesSection } from "./traffic-sources-section";
 import { BusinessInsightsSection } from "./business-insights-section";
-import { ReceiptIcon, TagIcon, UsersIcon, ReturnIcon, ChartIcon } from "@/components/icons";
-import type { DashboardFilter, DashboardOrderStatus } from "@/data/admin/types";
+import { ReceiptIcon, TagIcon, UsersIcon, ReturnIcon } from "@/components/icons";
+import type { DashboardFilter, DashboardOrderStatus, DateRangePreset } from "@/data/admin/types";
 
 const currency = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
 
+function toIsoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+const TODAY_ISO = toIsoDate(new Date());
+
+/** Resolves a date-range preset to concrete YYYY-MM-DD bounds against the real
+ *  current date — there is no fixed "dataset window" any more since this is
+ *  live data. "custom" keeps whatever the admin picked in the date inputs. */
+function resolvePresetRange(preset: DateRangePreset, customFrom: string, customTo: string): { from: string; to: string } {
+  if (preset === "custom") {
+    return { from: customFrom || TODAY_ISO, to: customTo || TODAY_ISO };
+  }
+  const spanDays = preset === "today" ? 0 : preset === "7d" ? 6 : preset === "30d" ? 29 : 89;
+  const to = new Date();
+  const from = new Date(to);
+  from.setDate(from.getDate() - spanDays);
+  return { from: toIsoDate(from), to: toIsoDate(to) };
+}
+
 const DEFAULT_FILTER: DashboardFilter = {
   preset: "30d",
-  from: DATASET_BOUNDS.from,
-  to: DATASET_BOUNDS.to,
+  ...resolvePresetRange("30d", "", ""),
   compare: false,
 };
 
@@ -35,14 +50,20 @@ export function DashboardView() {
   const [filter, setFilter] = useState<DashboardFilter>(DEFAULT_FILTER);
   const [metric, setMetric] = useState<SeriesMetric>("sales");
 
-  const optionsFetcher = useCallback(() => adminRepository.getDashboardFilterOptions(), []);
+  const optionsFetcher = useCallback(() => getDashboardFilterOptions(), []);
   const { data: options } = useAdminData(optionsFetcher);
 
-  const analyticsFetcher = useCallback(() => adminRepository.getDashboardAnalytics(filter), [filter]);
+  const analyticsFetcher = useCallback(() => getDashboardAnalytics(filter), [filter]);
   const { data, loading, error, reload } = useAdminData(analyticsFetcher);
 
   function patchFilter(patch: Partial<DashboardFilter>) {
-    setFilter((prev) => ({ ...prev, ...patch }));
+    setFilter((prev) => {
+      const next = { ...prev, ...patch };
+      if (patch.preset && patch.preset !== "custom") {
+        return { ...next, ...resolvePresetRange(patch.preset, prev.from, prev.to) };
+      }
+      return next;
+    });
   }
 
   function resetFilter() {
@@ -57,10 +78,6 @@ export function DashboardView() {
     patchFilter({ state: filter.state === state ? undefined : state });
   }
 
-  function toggleSource(source: string) {
-    patchFilter({ source: (filter.source === source ? undefined : source) as DashboardFilter["source"] });
-  }
-
   if (loading) return <LoadingState label="Loading dashboard…" />;
   if (error || !data) return <ErrorState message={error ?? "Could not load dashboard."} onRetry={reload} />;
 
@@ -69,18 +86,12 @@ export function DashboardView() {
       <div>
         <h1 className="text-xl font-bold text-text-primary">Dashboard</h1>
         <p className="mt-1 text-sm text-text-primary/60">
-          Commerce analytics — demo data, deterministic across reloads. Dataset spans {DATASET_BOUNDS.from} to {DATASET_BOUNDS.to}.
+          Commerce analytics from real Orders, Returns and Shipments. Sessions, page views and traffic sources
+          are not tracked anywhere in this system, so no conversion-funnel or traffic-source numbers are shown here.
         </p>
       </div>
 
-      <DashboardFilterBar
-        filter={filter}
-        options={options}
-        datasetFrom={DATASET_BOUNDS.from}
-        datasetTo={DATASET_BOUNDS.to}
-        onChange={patchFilter}
-        onReset={resetFilter}
-      />
+      <DashboardFilterBar filter={filter} options={options} maxDate={TODAY_ISO} onChange={patchFilter} onReset={resetFilter} />
 
       {data.isEmpty ? (
         <EmptyState
@@ -98,11 +109,10 @@ export function DashboardView() {
         />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
             <MetricComparisonCard label="Gross sales" comparison={data.summary.grossSales} showComparison={filter.compare} format={(v) => currency.format(v)} icon={<TagIcon width={16} height={16} />} />
             <MetricComparisonCard label="Orders" comparison={data.summary.orders} showComparison={filter.compare} format={(v) => v.toLocaleString("en-IN")} icon={<ReceiptIcon width={16} height={16} />} />
             <MetricComparisonCard label="Avg. order value" comparison={data.summary.averageOrderValue} showComparison={filter.compare} format={(v) => currency.format(v)} />
-            <MetricComparisonCard label="Conversion rate" comparison={data.summary.conversionRate} showComparison={filter.compare} format={(v) => `${v}%`} icon={<ChartIcon width={16} height={16} />} />
             <MetricComparisonCard label="Customers" comparison={data.summary.customers} showComparison={filter.compare} format={(v) => v.toLocaleString("en-IN")} icon={<UsersIcon width={16} height={16} />} />
             <MetricComparisonCard label="Open returns" comparison={data.summary.openReturns} showComparison={filter.compare} format={(v) => v.toLocaleString("en-IN")} icon={<ReturnIcon width={16} height={16} />} />
           </div>
@@ -119,13 +129,7 @@ export function DashboardView() {
             />
           </SectionCard>
 
-          <SectionCard title="Store conversion funnel">
-            <ConversionFunnel stages={data.funnel} />
-          </SectionCard>
-
           <ProductPerformanceSection rows={data.productPerformance} />
-
-          <ProductInterestSection rows={data.productInterest} mostViewedProductName={data.mostViewedProductName} />
 
           <OrderStatusSection
             slices={data.orderStatus}
@@ -141,8 +145,6 @@ export function DashboardView() {
           <CustomerOverviewSection overview={data.customerOverview} />
 
           <ReturnsSection returns={data.returns} />
-
-          <TrafficSourcesSection sources={data.trafficSources} activeSource={filter.source} onSourceClick={toggleSource} />
 
           <BusinessInsightsSection insights={data.insights} />
         </>

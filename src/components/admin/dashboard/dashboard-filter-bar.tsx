@@ -12,16 +12,6 @@ const PRESETS: { value: DateRangePreset; label: string }[] = [
   { value: "custom", label: "Custom" },
 ];
 
-const SOURCE_LABELS: Record<string, string> = {
-  direct: "Direct",
-  instagram: "Instagram",
-  facebook: "Facebook",
-  google_organic: "Google / Organic",
-  meta_ads: "Meta Ads",
-  youtube: "YouTube",
-  other: "Other",
-};
-
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pending",
   confirmed: "Confirmed",
@@ -32,20 +22,18 @@ const STATUS_LABELS: Record<string, string> = {
   return_requested: "Return requested",
 };
 
-const DEFAULT_FILTER_KEYS: (keyof DashboardFilter)[] = ["productId", "orderStatus", "state", "source"];
+const DEFAULT_FILTER_KEYS: (keyof DashboardFilter)[] = ["productId", "orderStatus", "state"];
 
 export function DashboardFilterBar({
   filter,
   options,
-  datasetFrom,
-  datasetTo,
+  maxDate,
   onChange,
   onReset,
 }: {
   filter: DashboardFilter;
   options: DashboardFilterOptions | null;
-  datasetFrom: string;
-  datasetTo: string;
+  maxDate: string;
   onChange: (patch: Partial<DashboardFilter>) => void;
   onReset: () => void;
 }) {
@@ -56,7 +44,6 @@ export function DashboardFilterBar({
   }
   if (filter.orderStatus) activeChips.push({ key: "orderStatus", label: `Status: ${STATUS_LABELS[filter.orderStatus]}` });
   if (filter.state) activeChips.push({ key: "state", label: `State: ${filter.state}` });
-  if (filter.source) activeChips.push({ key: "source", label: `Source: ${SOURCE_LABELS[filter.source]}` });
   if (filter.compare) activeChips.push({ key: "compare", label: "Comparing to previous period" });
   const hasActiveFilters = DEFAULT_FILTER_KEYS.some((k) => filter[k]) || filter.compare || filter.preset !== "30d";
 
@@ -91,8 +78,7 @@ export function DashboardFilterBar({
               <input
                 type="date"
                 value={filter.from}
-                min={datasetFrom}
-                max={filter.to || datasetTo}
+                max={filter.to || maxDate}
                 onChange={(e) => onChange({ from: e.target.value })}
                 className={ADMIN_INPUT_CLASS}
               />
@@ -102,8 +88,8 @@ export function DashboardFilterBar({
               <input
                 type="date"
                 value={filter.to}
-                min={filter.from || datasetFrom}
-                max={datasetTo}
+                min={filter.from}
+                max={maxDate}
                 onChange={(e) => onChange({ to: e.target.value })}
                 className={ADMIN_INPUT_CLASS}
               />
@@ -125,7 +111,7 @@ export function DashboardFilterBar({
           Product
           <select
             value={filter.productId ?? ""}
-            onChange={(e) => onChange({ productId: e.target.value || undefined })}
+            onChange={(e) => onChange({ productId: e.target.value ? Number(e.target.value) : undefined })}
             className={`${ADMIN_INPUT_CLASS} min-w-[10rem]`}
           >
             <option value="">All products</option>
@@ -164,22 +150,6 @@ export function DashboardFilterBar({
             {options?.states.map((s) => (
               <option key={s} value={s}>
                 {s}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-1 text-xs font-semibold text-text-primary/60">
-          Traffic source
-          <select
-            value={filter.source ?? ""}
-            onChange={(e) => onChange({ source: (e.target.value || undefined) as DashboardFilter["source"] })}
-            className={`${ADMIN_INPUT_CLASS} min-w-[9rem]`}
-          >
-            <option value="">All sources</option>
-            {options?.sources.map((s) => (
-              <option key={s} value={s}>
-                {SOURCE_LABELS[s]}
               </option>
             ))}
           </select>

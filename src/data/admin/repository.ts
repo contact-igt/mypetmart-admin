@@ -2,9 +2,6 @@ import type {
   Category,
   CategoryInput,
   Customer,
-  DashboardAnalyticsResult,
-  DashboardFilter,
-  DashboardFilterOptions,
   FulfilmentStatus,
   ListResult,
   Order,
@@ -31,9 +28,6 @@ import type {
  * changes. See docs/ADMIN_PANEL_PLAN.md §6.
  */
 export interface AdminRepository {
-  getDashboardFilterOptions(): Promise<DashboardFilterOptions>;
-  getDashboardAnalytics(filter: DashboardFilter): Promise<DashboardAnalyticsResult>;
-
   getProductSummary(): Promise<ProductSummary>;
   listProducts(params: ProductListParams): Promise<ListResult<Product>>;
   getProduct(id: string): Promise<Product | null>;
