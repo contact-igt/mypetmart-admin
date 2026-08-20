@@ -76,6 +76,17 @@ reports · inventory forecasting · automated report exports · blogs/backlinks/
 ongoing SEO · WhatsApp/SMS/email automation · paid plugins or unapproved
 paid services.
 
+**Override (2026-08-20): Newsletter subscribe V1 approved.** The blanket
+"subscriptions" / "WhatsApp/SMS/email automation" exclusions above no longer
+block newsletter list-building (see mypetmart-frontend/CLAUDE.md's matching
+note for the full scope). This admin app got a read-only Sales → Newsletter
+page (`/admin/newsletter`, `src/components/admin/newsletter/newsletter-list-view.tsx`)
+listing subscribers with status/search filters, wired to the real backend via
+`src/lib/api/admin-newsletter-api.ts` — no mock-repository detour, matching
+how Customers/Returns are already wired. Still excluded and NOT built: a
+campaign composer or any subscriber-facing send action from this admin app —
+that still requires separate approval.
+
 Full exclusion list → `docs/PROJECT_BRIEF.md`
 
 ## Unconfirmed public claims (do not publish as fact until approved)

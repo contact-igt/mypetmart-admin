@@ -8,6 +8,7 @@ import {
   ReturnIcon,
   ChartIcon,
   GearIcon,
+  MailIcon,
 } from "@/components/icons";
 import type { ComponentType, SVGProps } from "react";
 
@@ -42,6 +43,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
       { label: "Shipments", href: "/admin/shipments", icon: BoxIcon },
       { label: "Customers", href: "/admin/customers", icon: UsersIcon },
       { label: "Returns", href: "/admin/returns", icon: ReturnIcon },
+      { label: "Newsletter", href: "/admin/newsletter", icon: MailIcon },
     ],
   },
   {

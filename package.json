@@ -11,6 +11,7 @@
     "dev": "next dev -p 4000",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
+    "test:reports": "node scripts/reports-csv.test.mjs",
     "dev:admin": "next dev -p 4000",
     "build:admin": "next build",
     "lint:admin": "eslint src",

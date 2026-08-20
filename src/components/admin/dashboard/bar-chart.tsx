@@ -24,11 +24,11 @@ export function BarChart({
 
   return (
     <div role="img" aria-label={ariaLabel} className="w-full">
-      <div className="flex h-40 items-end gap-1.5">
+      <div className="flex h-40 items-end gap-1.5 lg:h-72">
         {points.map((point, index) => {
           const heightPct = Math.max(3, Math.round((point.value / max) * 100));
           return (
-            <div key={`${point.label}-${index}`} className="group relative flex-1">
+            <div key={`${point.label}-${index}`} className="group relative flex h-full flex-1 items-end">
               {activeIndex === index && (
                 <div className="absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md bg-deep-brown px-2 py-1 text-xs font-medium text-white">
                   {formatValue(point.value)}

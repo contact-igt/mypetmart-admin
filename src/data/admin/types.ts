@@ -109,6 +109,23 @@ export type Customer = {
 };
 
 /**
+ * V1 scope: capture + double opt-in only (see mypetmart-admin/CLAUDE.md's
+ * newsletter scope-override note). No campaign-sending status values — a
+ * subscriber is only ever pending, subscribed, or unsubscribed.
+ */
+export type NewsletterSubscriberStatus = "pending" | "subscribed" | "unsubscribed";
+
+export type NewsletterSubscriber = {
+  id: string;
+  email: string;
+  status: NewsletterSubscriberStatus;
+  source: string | null;
+  verifiedAt: string | null;
+  unsubscribedAt: string | null;
+  createdAt: string;
+};
+
+/**
  * pending -> confirmed -> processing -> shipped -> delivered is the canonical
  * forward path. cancelled is reachable from any pre-delivery stage;
  * return_requested is reachable only from delivered. Both are terminal. See
