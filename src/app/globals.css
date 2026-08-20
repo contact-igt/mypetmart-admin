@@ -35,6 +35,7 @@
   --color-text-primary: #2b1b14; /* APPROXIMATE — DESIGN_SYSTEM.md §3 */
   --color-text-muted: color-mix(in srgb, var(--color-text-primary) 65%, transparent); /* DERIVED — no separate muted token sampled */
   --color-deep-brown: #35221b; /* EXACT — footer bg / dark solid surfaces */
+  --color-sidebar-bg: color-mix(in srgb, var(--color-deep-brown) 80%, white 20%); /* DERIVED — lightened admin-sidebar-only surface so the navy/orange logo reads against it; the locked footer/dark-surface deep-brown itself is untouched everywhere else */
 
   /* Colour — structure */
   --color-border-subtle: color-mix(in srgb, var(--color-deep-brown) 16%, transparent); /* DERIVED — §10 describes a visible border, no hex sampled */

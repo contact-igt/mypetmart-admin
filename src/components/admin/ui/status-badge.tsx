@@ -29,6 +29,9 @@ const TONE_CLASSES: Record<string, string> = {
   succeeded: "bg-mint-sage text-text-primary",
   stock_unavailable: "bg-yellow-card text-text-primary",
   completed: "bg-primary-orange/15 text-primary-orange",
+  // newsletter subscriber statuses
+  subscribed: "bg-mint-sage text-text-primary",
+  unsubscribed: "bg-deep-brown/10 text-deep-brown",
 };
 
 export function StatusBadge({ status }: { status: string }) {

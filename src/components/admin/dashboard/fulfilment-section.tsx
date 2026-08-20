@@ -6,7 +6,7 @@ export function FulfilmentSection({ fulfilment }: { fulfilment: FulfilmentSummar
   return (
     <SectionCard
       title="Shipping and fulfilment"
-      demoLabel="Demo figures until a real shipping partner integration is connected — see mypetmart.org's shipping policy (Blue Dart, standard/express) for the ranges these demo values are modelled on."
+      description="From real Order status and Shipment records. “Delayed” is a heuristic: in-transit shipments still not delivered more than 5 days after shipping — there is no carrier SLA configured to compare against."
     >
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <StatCard label="Awaiting fulfilment" value={String(fulfilment.awaitingFulfilment)} />

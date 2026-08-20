@@ -46,9 +46,9 @@ export function AdminNavList({ onNavigate }: { onNavigate?: () => void }) {
 
 export function AdminSidebar() {
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-deep-brown px-4 py-5 lg:flex">
+    <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-[var(--color-sidebar-bg)] px-4 py-5 text-white lg:flex">
       <div className="px-2 pb-5">
-        <SiteLogo tone="inverted" />
+        <SiteLogo />
       </div>
       <div className="flex-1 overflow-y-auto">
         <AdminNavList />

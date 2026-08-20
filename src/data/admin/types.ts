@@ -109,6 +109,23 @@ export type Customer = {
 };
 
 /**
+ * V1 scope: capture + double opt-in only (see mypetmart-admin/CLAUDE.md's
+ * newsletter scope-override note). No campaign-sending status values — a
+ * subscriber is only ever pending, subscribed, or unsubscribed.
+ */
+export type NewsletterSubscriberStatus = "pending" | "subscribed" | "unsubscribed";
+
+export type NewsletterSubscriber = {
+  id: string;
+  email: string;
+  status: NewsletterSubscriberStatus;
+  source: string | null;
+  verifiedAt: string | null;
+  unsubscribedAt: string | null;
+  createdAt: string;
+};
+
+/**
  * pending -> confirmed -> processing -> shipped -> delivered is the canonical
  * forward path. cancelled is reachable from any pre-delivery stage;
  * return_requested is reachable only from delivered. Both are terminal. See
@@ -271,35 +288,18 @@ export type ListResult<T> = {
 };
 
 /**
- * Dashboard analytics domain — a self-contained event-driven demo dataset
- * (data/admin/dashboard-fixtures.ts) distinct from the Order/Customer
- * fixtures used by /admin/orders and /admin/customers. See
- * docs/audits/admin-dashboard-refinement-digest.md for why the two are
- * separate demo datasets rather than one shared source.
+ * Dashboard analytics domain — backed by GET /admin/dashboard/summary and
+ * /admin/dashboard/filter-options (see mypetmart-backend's DashboardModels).
+ * There is no session/page-view/traffic-source tracking anywhere in this
+ * system, so metrics that would require it (conversion rate, the
+ * sessions->views->cart->checkout funnel, traffic sources, product view
+ * counts) are not part of this type domain at all — seeing them would mean
+ * they were fabricated. Everything here is derived from real Orders,
+ * OrderItems, ReturnRequests and Shipments.
  */
 
-export type TrafficSource =
-  | "direct"
-  | "instagram"
-  | "facebook"
-  | "google_organic"
-  | "meta_ads"
-  | "youtube"
-  | "other";
-
-export type CommerceEventType =
-  | "session_started"
-  | "product_viewed"
-  | "added_to_cart"
-  | "checkout_started"
-  | "order_completed"
-  | "order_fulfilled"
-  | "return_requested";
-
-/** Status vocabulary for the dashboard's Order-status donut — intentionally
- *  separate from the 5-value `OrderStatus` used by /admin/orders, since the
- *  donut requires "Confirmed" and "Return requested" buckets that the order
- *  list's status field does not carry. */
+/** Status vocabulary for the dashboard's Order-status donut — the same
+ *  7-value OrderStatus the backend uses everywhere else (incl. /admin/orders). */
 export type DashboardOrderStatus =
   | "pending"
   | "confirmed"
@@ -309,29 +309,6 @@ export type DashboardOrderStatus =
   | "cancelled"
   | "return_requested";
 
-export type ShippingMode = "standard" | "express";
-export type ReturnReasonCode = "damaged" | "wrong_item" | "other";
-
-export type CommerceEvent = {
-  id: string;
-  type: CommerceEventType;
-  at: string;
-  sessionId: string;
-  /** Present once a session is attributable to a known or synthetic customer identity (assigned at order_completed and carried onto related events for that order). Whether this is the customer's first-ever order is derived downstream from the full event history, not stored here. */
-  customerId?: string;
-  /** Single line-item granularity: a 2-item order emits 2 order_completed events sharing orderId. */
-  productId?: string;
-  quantity?: number;
-  source: TrafficSource;
-  state: string;
-  city: string;
-  orderId?: string;
-  orderValue?: number;
-  orderStatus?: DashboardOrderStatus;
-  shippingMode?: ShippingMode;
-  returnReason?: ReturnReasonCode;
-};
-
 export type DateRangePreset = "today" | "7d" | "30d" | "90d" | "custom";
 
 export type DashboardFilter = {
@@ -339,23 +316,21 @@ export type DashboardFilter = {
   from: string;
   to: string;
   compare: boolean;
-  productId?: string;
+  productId?: number;
   orderStatus?: DashboardOrderStatus;
   state?: string;
-  source?: TrafficSource;
 };
 
 export type DashboardFilterOptions = {
-  products: { id: string; name: string }[];
+  products: { id: number; name: string }[];
   states: string[];
   orderStatuses: DashboardOrderStatus[];
-  sources: TrafficSource[];
 };
 
 export type MetricComparison = {
   value: number;
   previousValue: number;
-  /** null when there is no previous-period data to compare against (e.g. compare is off, or previous period is entirely outside the 90-day dataset). */
+  /** null when there is no previous-period data to compare against (e.g. compare is off). */
   changePct: number | null;
 };
 
@@ -363,7 +338,6 @@ export type CommerceSummary = {
   grossSales: MetricComparison;
   orders: MetricComparison;
   averageOrderValue: MetricComparison;
-  conversionRate: MetricComparison;
   customers: MetricComparison;
   openReturns: MetricComparison;
 };
@@ -376,34 +350,12 @@ export type TimeSeries = {
   groupBy: "day" | "week";
 };
 
-export type FunnelStage = {
-  key: "sessions" | "product_views" | "added_to_cart" | "checkout_started" | "purchase_completed";
-  label: string;
-  count: number;
-  conversionFromPrevious: number | null;
-  dropOffFromPrevious: number | null;
-};
-
 export type ProductPerformanceRow = {
-  productId: string;
+  productId: number;
   name: string;
-  views: number;
-  cartAdds: number;
-  checkouts: number;
   unitsSold: number;
-  conversionRate: number;
   revenue: number;
   returnRequests: number;
-};
-
-export type ProductInterestRow = {
-  productId: string;
-  name: string;
-  views: number;
-  uniqueVisitors: number;
-  cartAdds: number;
-  viewToCartRate: number;
-  cartToPurchaseRate: number;
 };
 
 export type OrderStatusSlice = { status: DashboardOrderStatus; count: number; percentage: number };
@@ -435,26 +387,12 @@ export type CustomerOverview = {
   firstTimeBuyers: number;
   repeatPurchaseRate: number;
   returningCustomerRevenue: number;
-  recentCustomers: { id: string; name: string; joinedAt: string; isReturning: boolean }[];
+  recentCustomers: { id: number; name: string; joinedAt: string; isReturning: boolean }[];
 };
 
 export type ReturnsOverview = {
   open: number;
-  damaged: number;
-  wrongItem: number;
-  other: number;
   statusBreakdown: { status: "requested" | "approved" | "rejected" | "resolved"; count: number }[];
-  eligibleWithinWindowPct: number;
-  returnWindowDays: number;
-};
-
-export type TrafficSourceRow = {
-  source: TrafficSource;
-  label: string;
-  sessions: number;
-  orders: number;
-  conversionRate: number;
-  revenue: number;
 };
 
 export type BusinessInsight = {
@@ -464,7 +402,7 @@ export type BusinessInsight = {
 };
 
 export type DashboardOrderRow = {
-  orderId: string;
+  orderId: number;
   orderNumber: string;
   customerLabel: string;
   total: number;
@@ -474,20 +412,15 @@ export type DashboardOrderRow = {
 };
 
 export type DashboardAnalyticsResult = {
-  filter: DashboardFilter;
   isEmpty: boolean;
   summary: CommerceSummary;
   timeSeries: TimeSeries;
-  funnel: FunnelStage[];
   productPerformance: ProductPerformanceRow[];
-  productInterest: ProductInterestRow[];
-  mostViewedProductName: string | null;
   orderStatus: OrderStatusSlice[];
   recentOrders: DashboardOrderRow[];
   fulfilment: FulfilmentSummary;
   locations: LocationPerformance[];
   customerOverview: CustomerOverview;
   returns: ReturnsOverview;
-  trafficSources: TrafficSourceRow[];
   insights: BusinessInsight[];
 };
