@@ -5,8 +5,10 @@ import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useAdminAuth } from "@/context/admin-auth-context";
 import { getBreadcrumbs } from "./nav-config";
-import { adminRepository } from "@/data/admin/mock-repository";
-import { MenuIcon, SearchIcon, UserIcon } from "@/components/icons";
+import { listAdminProducts } from "@/lib/api/admin-product-api";
+import { listAdminOrders } from "@/lib/api/admin-order-api";
+import { fetchAdminCustomers } from "@/lib/api/admin-customer-api";
+import { MenuIcon, SearchIcon, UserIcon, ChevronDownIcon, GearIcon, LogoutIcon } from "@/components/icons";
 
 type QuickResult = { label: string; sublabel: string; href: string };
 
@@ -20,6 +22,8 @@ export function AdminHeader({ onOpenMenu }: { onOpenMenu: () => void }) {
   const [results, setResults] = useState<QuickResult[]>([]);
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!query.trim()) {
@@ -27,18 +31,26 @@ export function AdminHeader({ onOpenMenu }: { onOpenMenu: () => void }) {
     }
     let cancelled = false;
     const timer = setTimeout(async () => {
-      const [products, orders, customers] = await Promise.all([
-        adminRepository.listProducts({ search: query, page: 1, pageSize: 3 }),
-        adminRepository.listOrders({ search: query, page: 1, pageSize: 3 }),
-        adminRepository.listCustomers({ search: query, page: 1, pageSize: 3 }),
-      ]);
-      if (cancelled) return;
-      setResults([
-        ...products.items.map((p) => ({ label: p.name, sublabel: "Product", href: `/admin/products/${p.id}/edit` })),
-        ...orders.items.map((o) => ({ label: o.orderNumber, sublabel: `Order · ${o.customerName}`, href: `/admin/orders/${o.id}` })),
-        ...customers.items.map((c) => ({ label: c.name, sublabel: "Customer", href: `/admin/customers/${c.id}` })),
-      ]);
-      setOpen(true);
+      try {
+        const [products, orders, customers] = await Promise.all([
+          listAdminProducts({ search: query, page: 1, pageSize: 3 }),
+          listAdminOrders({ search: query, page: 1, pageSize: 3 }),
+          fetchAdminCustomers({ search: query, page: 1, pageSize: 3 }),
+        ]);
+        if (cancelled) return;
+        setResults([
+          ...products.items.map((p) => ({ label: p.name, sublabel: "Product", href: `/admin/products/${p.id}/edit` })),
+          ...orders.items.map((o) => ({
+            label: o.orderNumber,
+            sublabel: `Order · ${o.customer?.name ?? "Guest"}`,
+            href: `/admin/orders/${o.id}`,
+          })),
+          ...customers.items.map((c) => ({ label: c.name, sublabel: "Customer", href: `/admin/customers/${c.id}` })),
+        ]);
+        setOpen(true);
+      } catch {
+        if (!cancelled) setResults([]);
+      }
     }, 200);
     return () => {
       cancelled = true;
@@ -50,6 +62,9 @@ export function AdminHeader({ onOpenMenu }: { onOpenMenu: () => void }) {
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setOpen(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -129,21 +144,57 @@ export function AdminHeader({ onOpenMenu }: { onOpenMenu: () => void }) {
           )}
         </div>
 
-        <div className="hidden items-center gap-2 pl-2 sm:flex">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-deep-brown text-white">
-            <UserIcon width={16} height={16} />
-          </span>
-          <div className="leading-tight">
-            <p className="text-sm font-semibold text-text-primary">{user?.name ?? "Admin"}</p>
-            <p className="text-xs text-text-primary/50 capitalize">{user?.role ?? "Signed in"}</p>
-          </div>
+        <div ref={userMenuRef} className="relative hidden pl-2 sm:block">
           <button
             type="button"
-            onClick={() => void logout()}
-            className="ml-2 rounded-lg border border-border-subtle bg-white px-2.5 py-1 text-xs font-medium text-text-primary transition-colors hover:bg-cream-bg hover:text-primary-orange"
+            onClick={() => setUserMenuOpen((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={userMenuOpen}
+            className="flex items-center gap-2 rounded-lg py-1 pl-1 pr-2 transition-colors duration-150 ease-out hover:bg-white"
           >
-            Log out
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-deep-brown text-white">
+              <UserIcon width={16} height={16} />
+            </span>
+            <span className="leading-tight">
+              <span className="block text-sm font-semibold text-text-primary">{user?.name ?? "Admin"}</span>
+              <span className="block text-xs text-text-primary/50 capitalize">{user?.role ?? "Signed in"}</span>
+            </span>
+            <ChevronDownIcon
+              width={14}
+              height={14}
+              aria-hidden="true"
+              className={`text-text-primary/50 transition-transform duration-150 ease-out ${userMenuOpen ? "rotate-180" : ""}`}
+            />
           </button>
+
+          {userMenuOpen && (
+            <div
+              role="menu"
+              className="absolute right-0 top-12 z-30 w-48 overflow-hidden rounded-lg border border-border-subtle bg-white shadow-lg"
+            >
+              <Link
+                href="/admin/settings"
+                role="menuitem"
+                onClick={() => setUserMenuOpen(false)}
+                className="flex items-center gap-2 px-3 py-2 text-sm text-text-primary transition-colors duration-150 ease-out hover:bg-cream-bg"
+              >
+                <GearIcon width={16} height={16} className="text-text-primary/60" aria-hidden="true" />
+                Settings
+              </Link>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setUserMenuOpen(false);
+                  void logout();
+                }}
+                className="flex w-full items-center gap-2 border-t border-border-subtle px-3 py-2 text-left text-sm text-text-primary transition-colors duration-150 ease-out hover:bg-cream-bg hover:text-primary-orange"
+              >
+                <LogoutIcon width={16} height={16} className="text-text-primary/60" aria-hidden="true" />
+                Log out
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>
