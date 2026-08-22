@@ -592,6 +592,7 @@ export function CategoryForm({ categoryId }: { categoryId?: string }) {
             open={galleryOpen}
             onClose={() => setGalleryOpen(false)}
             onSelect={selectGalleryAsset}
+            allowedTypes={["image"]}
           />
         </form>
       )}

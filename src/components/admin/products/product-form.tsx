@@ -27,6 +27,8 @@ import { ErrorState, LoadingState } from "../ui/empty-state";
 import { useToast } from "../ui/toast";
 import { ProductImageManager } from "./product-image-manager";
 import { VariantManager, blankVariant, validateVariantDraft, variantToInput, type VariantDraft, type VariantManagerHandle } from "./variant-manager";
+import { FeatureManager, featureToInput, validateFeatureDraft, type FeatureDraft, type FeatureManagerHandle } from "./feature-manager";
+import { ProductVideoManager, mediaAssignmentToInput, type MediaAssignmentDraft, type ProductVideoManagerHandle } from "./product-video-manager";
 import { CloseIcon, CopyIcon } from "@/components/icons";
 
 type FormState = {
@@ -73,6 +75,9 @@ export function ProductForm({ productId }: { productId?: string }) {
   const [categoriesLoaded, setCategoriesLoaded] = useState(false);
   const [categoryLoadError, setCategoryLoadError] = useState("");
   const [variantDrafts, setVariantDrafts] = useState<VariantDraft[]>([]);
+  const [featureDrafts, setFeatureDrafts] = useState<FeatureDraft[]>([]);
+  const [productVideoDrafts, setProductVideoDrafts] = useState<MediaAssignmentDraft[]>([]);
+  const [testimonialVideoDrafts, setTestimonialVideoDrafts] = useState<MediaAssignmentDraft[]>([]);
   const [pendingImages, setPendingImages] = useState<PendingProductImage[]>([]);
   const [tagDraft, setTagDraft] = useState("");
   const [loading, setLoading] = useState(isEditing && !invalidProductId);
@@ -81,7 +86,13 @@ export function ProductForm({ productId }: { productId?: string }) {
   const [duplicating, setDuplicating] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [variantsDirty, setVariantsDirty] = useState(false);
+  const [featuresDirty, setFeaturesDirty] = useState(false);
+  const [productVideosDirty, setProductVideosDirty] = useState(false);
+  const [testimonialVideosDirty, setTestimonialVideosDirty] = useState(false);
   const variantManagerRef = useRef<VariantManagerHandle>(null);
+  const featureManagerRef = useRef<FeatureManagerHandle>(null);
+  const productVideoManagerRef = useRef<ProductVideoManagerHandle>(null);
+  const testimonialVideoManagerRef = useRef<ProductVideoManagerHandle>(null);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [generalError, setGeneralError] = useState("");
@@ -148,6 +159,12 @@ export function ProductForm({ productId }: { productId?: string }) {
         if (message && !next.variants) next.variants = `Variant ${index + 1}: ${message}`;
       });
     }
+    if (!isEditing) {
+      featureDrafts.forEach((feature, index) => {
+        const message = validateFeatureDraft(feature);
+        if (message && !next.features) next.features = `Feature ${index + 1}: ${message}`;
+      });
+    }
     if (form.weightGrams.trim() && (!Number.isInteger(Number(form.weightGrams)) || Number(form.weightGrams) <= 0)) next.weightGrams = "Weight must be a positive whole number.";
     (["lengthCm", "widthCm", "heightCm"] as const).forEach((field) => {
       if (form[field].trim() && (!SHIPPING_PATTERN.test(form[field].trim()) || Number(form[field]) <= 0)) next[field] = "Use a positive value with no more than 2 decimal places.";
@@ -176,6 +193,18 @@ export function ProductForm({ productId }: { productId?: string }) {
           setGeneralError("Product fields were not saved because one or more Variant changes were rejected.");
           return;
         }
+        if (!(await featureManagerRef.current?.savePending())) {
+          setGeneralError("Product fields were not saved because one or more Feature changes were rejected.");
+          return;
+        }
+        if (!(await productVideoManagerRef.current?.savePending())) {
+          setGeneralError("Product fields were not saved because one or more Product Video changes were rejected.");
+          return;
+        }
+        if (!(await testimonialVideoManagerRef.current?.savePending())) {
+          setGeneralError("Product fields were not saved because one or more Testimonial Video changes were rejected.");
+          return;
+        }
         await updateAdminProduct(numericProductId, payload());
         if (requestedStatus !== product.status) {
           try { await setAdminProductStatus(numericProductId, requestedStatus); }
@@ -188,7 +217,11 @@ export function ProductForm({ productId }: { productId?: string }) {
         }
         await loadProduct(); setDirty(false); showToast("Product saved to the production catalog.");
       } else {
-        const created = await createAdminProduct({ ...payload(), status: requestedStatus, hasVariants: form.productType === "variant", variants: form.productType === "variant" ? variantDrafts.map(variantToInput) : undefined });
+        const mediaAssignments = [
+          ...productVideoDrafts.map((draft, index) => mediaAssignmentToInput(draft, "product_video", index)),
+          ...testimonialVideoDrafts.map((draft, index) => mediaAssignmentToInput(draft, "testimonial_video", index)),
+        ];
+        const created = await createAdminProduct({ ...payload(), status: requestedStatus, hasVariants: form.productType === "variant", variants: form.productType === "variant" ? variantDrafts.map(variantToInput) : undefined, features: featureDrafts.length ? featureDrafts.map(featureToInput) : undefined, mediaAssignments: mediaAssignments.length ? mediaAssignments : undefined });
         let failedUploads = 0;
         for (const image of pendingImages) {
           try {
@@ -267,10 +300,13 @@ export function ProductForm({ productId }: { productId?: string }) {
     </div></section>
     {form.productType === "simple" ? <section className="rounded-xl border border-border-subtle bg-white p-4 sm:p-5"><h2 className="mb-4 text-sm font-semibold">Pricing and inventory</h2><div className="grid gap-4 sm:grid-cols-3"><FormField label="Price (₹)" htmlFor="p-price" error={errors.price}><input id="p-price" type="number" min="0" step="0.01" value={form.price} onChange={(e) => update("price",e.target.value)} aria-invalid={Boolean(errors.price)} aria-describedby={errors.price ? "p-price-error" : undefined} className={ADMIN_INPUT_CLASS} /></FormField><FormField label="Compare-at price (₹)" htmlFor="p-compare" optional error={errors.compareAtPrice}><input id="p-compare" type="number" min="0" step="0.01" value={form.compareAtPrice} onChange={(e) => update("compareAtPrice",e.target.value)} aria-invalid={Boolean(errors.compareAtPrice)} aria-describedby={errors.compareAtPrice ? "p-compare-error" : undefined} className={ADMIN_INPUT_CLASS} /></FormField><FormField label="Stock" htmlFor="p-stock" error={errors.stock}><input id="p-stock" type="number" min="0" step="1" value={form.stock} onChange={(e) => update("stock",e.target.value)} aria-invalid={Boolean(errors.stock)} aria-describedby={errors.stock ? "p-stock-error" : undefined} className={ADMIN_INPUT_CLASS} /></FormField></div></section> : <VariantManager ref={variantManagerRef} key={product ? `variants-${product.updatedAt}-${product.variants.map((variant) => variant.updatedAt).join("-")}` : "new-variants"} productId={numericProductId} productStatus={form.status} variants={product?.variants} drafts={isEditing ? undefined : variantDrafts} onDraftsChange={(next) => { setVariantDrafts(next); setDirty(true); }} onDirtyChange={setVariantsDirty} onChanged={refreshRelatedData} />}
     <section className="rounded-xl border border-border-subtle bg-white p-4 sm:p-5"><h2 className="mb-1 text-sm font-semibold">Shipping defaults</h2><p className="mb-4 text-xs text-text-primary/50">Optional shipping information. Variants inherit these values when their override is blank.</p><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><FormField label="Weight (g)" htmlFor="p-weight" optional error={errors.weightGrams}><input id="p-weight" type="number" min="1" step="1" value={form.weightGrams} onChange={(e) => update("weightGrams",e.target.value)} aria-invalid={Boolean(errors.weightGrams)} aria-describedby={errors.weightGrams ? "p-weight-error" : undefined} className={ADMIN_INPUT_CLASS} /></FormField>{([['lengthCm','Length (cm)'],['widthCm','Width (cm)'],['heightCm','Height (cm)']] as const).map(([field,label]) => <FormField key={field} label={label} htmlFor={`p-${field}`} optional error={errors[field]}><input id={`p-${field}`} type="number" min="0.01" step="0.01" value={form[field]} onChange={(e) => update(field,e.target.value)} aria-invalid={Boolean(errors[field])} aria-describedby={errors[field] ? `p-${field}-error` : undefined} className={ADMIN_INPUT_CLASS} /></FormField>)}</div></section>
+    <FeatureManager ref={featureManagerRef} key={product ? `features-${product.updatedAt}-${product.features.map((feature) => feature.updatedAt).join("-")}` : "new-features"} productId={numericProductId} features={product?.features} drafts={isEditing ? undefined : featureDrafts} onDraftsChange={(next) => { setFeatureDrafts(next); setDirty(true); }} onDirtyChange={setFeaturesDirty} onChanged={refreshRelatedData} />{errors.features && <p role="alert" className="text-sm font-medium text-terracotta">{errors.features}</p>}
     <ProductImageManager key={product ? `images-${product.updatedAt}-${product.images.map((image) => `${image.id}-${image.sortOrder}-${image.alt}-${image.isPrimary}`).join("-")}` : "new-images"} productId={numericProductId} images={product?.images} pending={pendingImages} onPendingChange={(next) => { setPendingImages(next); setDirty(true); }} onChanged={refreshRelatedData} />{errors.images && <p role="alert" className="text-sm font-medium text-terracotta">{errors.images}</p>}
+    <ProductVideoManager ref={productVideoManagerRef} role="product_video" heading="Product Videos" hint="Optional demo/showcase videos shown in a dedicated PDP section." emptyLabel="No Product Videos yet. This section stays hidden on the Product page until at least one video is added." key={product ? `product-videos-${product.updatedAt}-${product.productVideos.map((v) => v.id).join("-")}` : "new-product-videos"} productId={numericProductId} assignments={product?.productVideos} drafts={isEditing ? undefined : productVideoDrafts} onDraftsChange={(next) => { setProductVideoDrafts(next); setDirty(true); }} onDirtyChange={setProductVideosDirty} onChanged={refreshRelatedData} />
+    <ProductVideoManager ref={testimonialVideoManagerRef} role="testimonial_video" heading="Testimonial Videos" hint="Optional real, approved customer-story videos assigned to this Product." emptyLabel="No Testimonial Videos yet. Only assign real, approved customer content." key={product ? `testimonial-videos-${product.updatedAt}-${product.testimonialVideos.map((v) => v.id).join("-")}` : "new-testimonial-videos"} productId={numericProductId} assignments={product?.testimonialVideos} drafts={isEditing ? undefined : testimonialVideoDrafts} onDraftsChange={(next) => { setTestimonialVideoDrafts(next); setDirty(true); }} onDirtyChange={setTestimonialVideosDirty} onChanged={refreshRelatedData} />
     <section className="rounded-xl border border-border-subtle bg-white p-4 sm:p-5"><h2 className="mb-4 text-sm font-semibold">SEO</h2><div className="grid gap-4 sm:grid-cols-2"><FormField label="Meta title" htmlFor="p-meta-title" optional><input id="p-meta-title" maxLength={70} value={form.metaTitle} onChange={(e) => update("metaTitle",e.target.value)} className={ADMIN_INPUT_CLASS} /></FormField><FormField label="Meta description" htmlFor="p-meta-description" optional><textarea id="p-meta-description" maxLength={160} rows={2} value={form.metaDescription} onChange={(e) => update("metaDescription",e.target.value)} className={ADMIN_INPUT_CLASS} /></FormField></div><div className="mt-4 rounded-lg bg-cream-bg/60 p-3"><p className="truncate text-sm font-medium text-primary-orange">{form.metaTitle || form.name || "Product name"}</p><p className="truncate text-xs text-text-primary/50">mypetmart.com/product/{slugPreview}</p><p className="mt-1 line-clamp-2 text-xs text-text-primary/70">{form.metaDescription || form.description || "Product description"}</p></div></section>
     {isEditing && <button type="button" onClick={duplicate} disabled={duplicating} className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border-subtle bg-white px-4 py-2 text-sm font-semibold disabled:opacity-50"><CopyIcon width={14} /> {duplicating ? "Duplicating…" : "Duplicate as new draft"}</button>}
-    <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border-subtle bg-white/95 px-4 py-3 backdrop-blur lg:left-64"><div className="mx-auto flex max-w-5xl items-center justify-between gap-3"><p className="hidden text-xs text-text-primary/50 sm:block">{dirty || variantsDirty ? "You have unsaved Product or Variant fields." : "Product and Variant fields are saved."}</p><div className="ml-auto flex gap-2"><button type="button" onClick={() => dirty || variantsDirty ? setDiscardOpen(true) : router.push("/admin/products")} className="rounded-lg border border-border-subtle px-4 py-2 text-sm">Cancel</button>{form.status === "draft" && <button type="button" disabled={saving} onClick={() => save("active")} className="rounded-lg border border-primary-orange px-4 py-2 text-sm font-semibold text-primary-orange disabled:opacity-50">Publish</button>}<button type="submit" disabled={saving} className="rounded-lg bg-primary-orange px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Saving…" : form.status === "draft" ? "Save draft" : "Save Product"}</button></div></div></div>
-    <ConfirmDialog open={discardOpen} onClose={() => setDiscardOpen(false)} onConfirm={() => router.push("/admin/products")} title="Discard unsaved changes?" description="Saved Variant and image operations will remain. Unsaved Product and Variant fields will be discarded." confirmLabel="Discard" />
+    <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border-subtle bg-white/95 px-4 py-3 backdrop-blur lg:left-64"><div className="mx-auto flex max-w-5xl items-center justify-between gap-3"><p className="hidden text-xs text-text-primary/50 sm:block">{dirty || variantsDirty || featuresDirty || productVideosDirty || testimonialVideosDirty ? "You have unsaved Product, Variant, Feature, or Video fields." : "Product, Variant, Feature, and Video fields are saved."}</p><div className="ml-auto flex gap-2"><button type="button" onClick={() => dirty || variantsDirty || featuresDirty || productVideosDirty || testimonialVideosDirty ? setDiscardOpen(true) : router.push("/admin/products")} className="rounded-lg border border-border-subtle px-4 py-2 text-sm">Cancel</button>{form.status === "draft" && <button type="button" disabled={saving} onClick={() => save("active")} className="rounded-lg border border-primary-orange px-4 py-2 text-sm font-semibold text-primary-orange disabled:opacity-50">Publish</button>}<button type="submit" disabled={saving} className="rounded-lg bg-primary-orange px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Saving…" : form.status === "draft" ? "Save draft" : "Save Product"}</button></div></div></div>
+    <ConfirmDialog open={discardOpen} onClose={() => setDiscardOpen(false)} onConfirm={() => router.push("/admin/products")} title="Discard unsaved changes?" description="Saved Variant, Feature, Video, and image operations will remain. Unsaved Product, Variant, Feature, and Video fields will be discarded." confirmLabel="Discard" />
   </form>;
 }
