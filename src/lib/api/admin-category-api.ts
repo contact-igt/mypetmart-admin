@@ -9,6 +9,7 @@ type BackendCategory = {
   petType: PetType;
   active: boolean;
   displayOrder: number;
+  showOnHomepage: boolean;
   imageKey: string | null;
   imageUrl: string | null;
   imageAlt: string | null;
@@ -22,12 +23,12 @@ export type CategoryStatusFilter = "all" | "active" | "inactive" | "deleted";
 
 export type CategoryUpdateInput = Pick<
   CategoryInput,
-  "name" | "description" | "petType"
+  "name" | "description" | "petType" | "showOnHomepage" | "imageKey" | "imageUrl" | "imageAlt"
 >;
 
 export type CategoryCreateInput = Pick<
   CategoryInput,
-  "name" | "slug" | "description" | "petType" | "active"
+  "name" | "slug" | "description" | "petType" | "active" | "showOnHomepage" | "imageKey" | "imageUrl" | "imageAlt"
 >;
 
 // Mirrors backend/src/models/CategoryModels/category.validation.ts exactly.
@@ -49,6 +50,10 @@ function toCategory(category: BackendCategory): Category {
     petType: category.petType,
     order: category.displayOrder,
     active: category.active,
+    showOnHomepage: category.showOnHomepage,
+    imageKey: category.imageKey,
+    imageUrl: category.imageUrl,
+    imageAlt: category.imageAlt,
     productCount: category.productCount,
     createdAt: category.createdAt,
     updatedAt: category.updatedAt,
@@ -89,6 +94,10 @@ export async function createAdminCategory(input: CategoryCreateInput): Promise<C
       description: input.description || null,
       petType: input.petType,
       active: input.active,
+      showOnHomepage: input.showOnHomepage ?? false,
+      imageKey: input.imageKey ?? null,
+      imageUrl: input.imageUrl ?? null,
+      imageAlt: input.imageAlt ?? null,
     }),
   });
   return toCategory(category);
@@ -104,6 +113,10 @@ export async function updateAdminCategory(
       name: input.name,
       description: input.description || null,
       petType: input.petType,
+      showOnHomepage: input.showOnHomepage,
+      imageKey: input.imageKey ?? null,
+      imageUrl: input.imageUrl ?? null,
+      imageAlt: input.imageAlt ?? null,
     }),
   });
   return toCategory(category);

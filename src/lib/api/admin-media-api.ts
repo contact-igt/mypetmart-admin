@@ -1,5 +1,7 @@
 import { AdminApiError, adminApiRequest } from "@/lib/api/admin-api-client";
 
+export type MediaAssetType = "image" | "video";
+
 export type MediaAsset = {
   id: number;
   fileName: string;
@@ -7,6 +9,7 @@ export type MediaAsset = {
   storageKey?: string;
   url: string;
   mimeType: string;
+  mediaType: MediaAssetType;
   fileSize: number;
   width: number | null;
   height: number | null;
@@ -35,7 +38,7 @@ export function describeAdminError(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-export function listAdminMediaAssets(query: { page?: number; pageSize?: number; search?: string }): Promise<MediaAssetListResult> {
+export function listAdminMediaAssets(query: { page?: number; pageSize?: number; search?: string; type?: MediaAssetType }): Promise<MediaAssetListResult> {
   const params = new URLSearchParams();
   Object.entries(query).forEach(([key, value]) => {
     if (value !== undefined && value !== "") params.set(key, String(value));
@@ -59,11 +62,24 @@ export function deleteAdminMediaAsset(mediaAssetId: number): Promise<{ deleted: 
 }
 
 export const MEDIA_ASSET_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+export const MEDIA_ASSET_VIDEO_TYPES = ["video/mp4"] as const;
+export const MEDIA_ASSET_ALL_TYPES = [...MEDIA_ASSET_TYPES, ...MEDIA_ASSET_VIDEO_TYPES] as const;
 export const MEDIA_ASSET_MAX_BYTES = 5 * 1024 * 1024;
+export const MEDIA_ASSET_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
+
+function isVideoMimeType(contentType: string): boolean {
+  return (MEDIA_ASSET_VIDEO_TYPES as readonly string[]).includes(contentType);
+}
 
 export function validateMediaAssetFile(file: File): string | null {
-  if (!MEDIA_ASSET_TYPES.includes(file.type as (typeof MEDIA_ASSET_TYPES)[number])) {
-    return "Use a JPEG, PNG, or WebP image.";
+  if (!(MEDIA_ASSET_ALL_TYPES as readonly string[]).includes(file.type)) {
+    return "Use a JPEG, PNG, WebP image, or MP4 video.";
+  }
+  if (isVideoMimeType(file.type)) {
+    if (file.size <= 0 || file.size > MEDIA_ASSET_VIDEO_MAX_BYTES) {
+      return "MP4 video size must be between 1 byte and 50 MB.";
+    }
+    return null;
   }
   if (file.size <= 0 || file.size > MEDIA_ASSET_MAX_BYTES) {
     return "Image size must be between 1 byte and 5 MB.";
@@ -72,7 +88,7 @@ export function validateMediaAssetFile(file: File): string | null {
 }
 
 async function readImageDimensions(file: File): Promise<{ width?: number; height?: number }> {
-  if (typeof createImageBitmap !== "function") return {};
+  if (isVideoMimeType(file.type) || typeof createImageBitmap !== "function") return {};
   try {
     const bitmap = await createImageBitmap(file);
     const dimensions = { width: bitmap.width, height: bitmap.height };

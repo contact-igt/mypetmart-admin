@@ -222,6 +222,10 @@ class MockAdminRepository implements AdminRepository {
       petType: input.petType,
       active: input.active,
       order: this.categories.length,
+      showOnHomepage: input.showOnHomepage ?? false,
+      imageKey: input.imageKey ?? null,
+      imageUrl: input.imageUrl ?? null,
+      imageAlt: input.imageAlt ?? null,
     };
     this.categories = [...this.categories, category];
     return delay({ ...clone(category), productCount: 0 });

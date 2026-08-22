@@ -8,8 +8,12 @@ import {
   listAdminMediaAssets,
   updateAdminMediaAsset,
   uploadAdminMediaAsset,
+  MEDIA_ASSET_ALL_TYPES,
+  MEDIA_ASSET_MAX_BYTES,
+  MEDIA_ASSET_VIDEO_MAX_BYTES,
   type MediaAsset,
   type MediaAssetListResult,
+  type MediaAssetType,
 } from "@/lib/api/admin-media-api";
 import { AdminApiError } from "@/lib/api/admin-api-client";
 import { ADMIN_INPUT_CLASS, FormField } from "../ui/form-field";
@@ -39,9 +43,21 @@ function formatDate(iso: string): string {
  * that reuses the exact same grid, search, pagination and upload — clicking
  * an asset calls onSelect instead of opening its edit/delete controls.
  */
-export function MediaGrid({ mode, onSelect }: { mode: "manage" | "pick"; onSelect?: (asset: MediaAsset) => void }) {
+export function MediaGrid({
+  mode,
+  onSelect,
+  allowedTypes,
+}: {
+  mode: "manage" | "pick";
+  onSelect?: (asset: MediaAsset) => void;
+  /** Omit for the full Media Gallery (All/Images/Videos filter shown). Pass a single
+   * type to lock a picker to that type only (no filter UI) — see MediaPickerDrawer. */
+  allowedTypes?: MediaAssetType[];
+}) {
   const { showToast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
+  const locked = allowedTypes && allowedTypes.length === 1 ? allowedTypes[0] : undefined;
+  const [typeFilter, setTypeFilter] = useState<MediaAssetType | undefined>(locked);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -68,7 +84,7 @@ export function MediaGrid({ mode, onSelect }: { mode: "manage" | "pick"; onSelec
       setLoading(true);
       setError("");
     });
-    listAdminMediaAssets({ page, pageSize: PAGE_SIZE, search: debouncedSearch || undefined })
+    listAdminMediaAssets({ page, pageSize: PAGE_SIZE, search: debouncedSearch || undefined, type: typeFilter })
       .then((result) => {
         if (!live) return;
         if (page > Math.max(1, result.totalPages)) {
@@ -86,10 +102,15 @@ export function MediaGrid({ mode, onSelect }: { mode: "manage" | "pick"; onSelec
     return () => {
       live = false;
     };
-  }, [page, debouncedSearch, reloadKey]);
+  }, [page, debouncedSearch, typeFilter, reloadKey]);
 
   function reload() {
     setReloadKey((value) => value + 1);
+  }
+
+  function changeTypeFilter(next: MediaAssetType | undefined) {
+    setTypeFilter(next);
+    setPage(1);
   }
 
   async function handleUpload(files: FileList | null) {
@@ -175,6 +196,23 @@ export function MediaGrid({ mode, onSelect }: { mode: "manage" | "pick"; onSelec
             className="h-11 w-full rounded-lg border border-border-subtle bg-white pl-10 pr-3 text-sm outline-none transition focus:border-primary-orange focus:ring-2 focus:ring-primary-orange/10"
           />
         </label>
+        {!locked && (
+          <div className="inline-flex rounded-lg border border-border-subtle bg-white p-0.5 text-xs font-semibold">
+            {([[undefined, "All"], ["image", "Images"], ["video", "Videos"]] as const).map(([value, label]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => changeTypeFilter(value)}
+                aria-pressed={typeFilter === value}
+                className={`rounded-md px-3 py-1.5 transition-colors ${
+                  typeFilter === value ? "bg-primary-orange text-white" : "text-text-primary/60 hover:text-text-primary"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         <button
           type="button"
           disabled={uploading}
@@ -186,12 +224,19 @@ export function MediaGrid({ mode, onSelect }: { mode: "manage" | "pick"; onSelec
         <input
           ref={inputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept={(locked === "video" ? MEDIA_ASSET_ALL_TYPES.filter((type) => type.startsWith("video/")) : locked === "image" ? MEDIA_ASSET_ALL_TYPES.filter((type) => type.startsWith("image/")) : MEDIA_ASSET_ALL_TYPES).join(",")}
           onChange={(event) => void handleUpload(event.target.files)}
           className="sr-only"
           aria-label="Upload to Media Gallery"
         />
       </div>
+      <p className="text-xs text-text-primary/45">
+        {locked === "video"
+          ? `MP4 video, up to ${Math.round(MEDIA_ASSET_VIDEO_MAX_BYTES / (1024 * 1024))} MB.`
+          : locked === "image"
+            ? `JPEG, PNG, or WebP, up to ${Math.round(MEDIA_ASSET_MAX_BYTES / (1024 * 1024))} MB.`
+            : `Images: JPEG, PNG, or WebP, up to ${Math.round(MEDIA_ASSET_MAX_BYTES / (1024 * 1024))} MB. MP4 video: up to ${Math.round(MEDIA_ASSET_VIDEO_MAX_BYTES / (1024 * 1024))} MB.`}
+      </p>
       {uploading && uploadStage && (
         <p role="status" className="rounded-lg border border-primary-orange/30 bg-primary-orange/5 p-3 text-xs font-medium text-primary-orange">
           {uploadStage}…
@@ -215,9 +260,25 @@ export function MediaGrid({ mode, onSelect }: { mode: "manage" | "pick"; onSelec
                 <button
                   type="button"
                   onClick={() => (mode === "pick" ? onSelect?.(asset) : openEdit(asset))}
-                  className="block w-full text-left"
+                  className="relative block w-full text-left"
                 >
-                  <img src={asset.url} alt={asset.altText ?? asset.originalName} className="aspect-square w-full bg-cream-bg object-cover" />
+                  {asset.mediaType === "video" ? (
+                    <video
+                      src={asset.url}
+                      muted
+                      loop
+                      playsInline
+                      preload="metadata"
+                      className="aspect-square w-full bg-cream-bg object-cover"
+                    />
+                  ) : (
+                    <img src={asset.url} alt={asset.altText ?? asset.originalName} className="aspect-square w-full bg-cream-bg object-cover" />
+                  )}
+                  {asset.mediaType === "video" && (
+                    <span className="pointer-events-none absolute left-1.5 top-1.5 inline-flex items-center rounded-full bg-deep-brown/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                      Video
+                    </span>
+                  )}
                 </button>
                 <div className="p-2">
                   <p className="truncate text-xs font-medium text-text-primary" title={asset.originalName}>

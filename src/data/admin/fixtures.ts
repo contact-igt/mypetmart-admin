@@ -23,13 +23,15 @@ function daysAgo(n: number, hour = 10): string {
   return d.toISOString();
 }
 
+const NO_HOMEPAGE_IMAGE = { showOnHomepage: false, imageKey: null, imageUrl: null, imageAlt: null } as const;
+
 export const CATEGORIES: Category[] = [
-  { id: "cat-grooming", name: "Grooming", slug: "grooming", description: "Brushes, combs and tools for coat care.", petType: "all", order: 0, active: true },
-  { id: "cat-walking", name: "Walking Essentials", slug: "walking-essentials", description: "Leashes, harnesses and collars for daily walks.", petType: "dog", order: 1, active: true },
-  { id: "cat-paw-care", name: "Paw Care", slug: "paw-care", description: "Pads and balms that protect paws on any surface.", petType: "all", order: 2, active: true },
-  { id: "cat-dog", name: "Dog Essentials", slug: "dog-essentials", description: "Everyday dog-care basics — feeding, comfort and training.", petType: "dog", order: 3, active: true },
-  { id: "cat-cat", name: "Cat Essentials", slug: "cat-essentials", description: "Beds, posts and fountains built for cats.", petType: "cat", order: 4, active: true },
-  { id: "cat-seasonal", name: "Seasonal", slug: "seasonal", description: "Limited-run seasonal picks.", petType: "all", order: 5, active: false },
+  { id: "cat-grooming", name: "Grooming", slug: "grooming", description: "Brushes, combs and tools for coat care.", petType: "all", order: 0, active: true, ...NO_HOMEPAGE_IMAGE },
+  { id: "cat-walking", name: "Walking Essentials", slug: "walking-essentials", description: "Leashes, harnesses and collars for daily walks.", petType: "dog", order: 1, active: true, ...NO_HOMEPAGE_IMAGE },
+  { id: "cat-paw-care", name: "Paw Care", slug: "paw-care", description: "Pads and balms that protect paws on any surface.", petType: "all", order: 2, active: true, ...NO_HOMEPAGE_IMAGE },
+  { id: "cat-dog", name: "Dog Essentials", slug: "dog-essentials", description: "Everyday dog-care basics — feeding, comfort and training.", petType: "dog", order: 3, active: true, ...NO_HOMEPAGE_IMAGE },
+  { id: "cat-cat", name: "Cat Essentials", slug: "cat-essentials", description: "Beds, posts and fountains built for cats.", petType: "cat", order: 4, active: true, ...NO_HOMEPAGE_IMAGE },
+  { id: "cat-seasonal", name: "Seasonal", slug: "seasonal", description: "Limited-run seasonal picks.", petType: "all", order: 5, active: false, ...NO_HOMEPAGE_IMAGE },
 ];
 
 export const PRODUCTS: Product[] = [

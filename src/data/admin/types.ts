@@ -68,6 +68,11 @@ export type Category = {
   petType: PetType;
   order: number;
   active: boolean;
+  /** Eligible for a future curated Homepage display — independent of `active`. */
+  showOnHomepage: boolean;
+  imageKey: string | null;
+  imageUrl: string | null;
+  imageAlt: string | null;
   /** Derived at read time from the current product set — never stored. */
   productCount?: number;
   createdAt?: string;
@@ -82,6 +87,10 @@ export type CategoryInput = {
   petType: PetType;
   active: boolean;
   displayOrder: number;
+  showOnHomepage?: boolean;
+  imageKey?: string | null;
+  imageUrl?: string | null;
+  imageAlt?: string | null;
 };
 
 export type Customer = {

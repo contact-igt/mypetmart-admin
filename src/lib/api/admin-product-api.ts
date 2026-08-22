@@ -38,6 +38,35 @@ export type ProductVariant = {
   updatedAt: string;
 };
 
+export type ProductFeature = {
+  id: number;
+  productId: number;
+  label: string;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProductMediaRole = "product_video" | "testimonial_video";
+
+export type ProductMediaAssignment = {
+  id: number;
+  mediaAssetId: number;
+  mediaRole: ProductMediaRole;
+  title: string | null;
+  caption: string | null;
+  displayOrder: number;
+  active: boolean;
+  media: {
+    id: number;
+    publicUrl: string;
+    mimeType: string;
+    mediaType: "image" | "video";
+    title: string | null;
+    originalName: string;
+  };
+};
+
 export type ProductListItem = {
   id: number;
   categoryId: number;
@@ -73,6 +102,9 @@ export type ProductDetail = ProductListItem & {
   metaDescription: string | null;
   variants: ProductVariant[];
   images: ProductImage[];
+  features: ProductFeature[];
+  productVideos: ProductMediaAssignment[];
+  testimonialVideos: ProductMediaAssignment[];
 };
 
 export type VariantInput = {
@@ -87,6 +119,20 @@ export type VariantInput = {
   lengthCm?: string | null;
   widthCm?: string | null;
   heightCm?: string | null;
+};
+
+export type FeatureInput = {
+  label: string;
+  displayOrder?: number;
+};
+
+export type MediaAssignmentInput = {
+  mediaAssetId: number;
+  mediaRole: ProductMediaRole;
+  title?: string | null;
+  caption?: string | null;
+  displayOrder?: number;
+  active?: boolean;
 };
 
 export type ProductInput = {
@@ -125,6 +171,8 @@ export type CreateProductInput = ProductInput & {
   status: ProductStatus;
   hasVariants: boolean;
   variants?: VariantInput[];
+  features?: FeatureInput[];
+  mediaAssignments?: MediaAssignmentInput[];
 };
 
 export type ProductListResult = {
@@ -256,6 +304,60 @@ export function reorderAdminVariants(productId: number, orderedIds: number[]): P
   return adminApiRequest<ProductVariant[]>(`${productPath(productId)}/variants/reorder`, {
     method: "PATCH",
     body: JSON.stringify({ orderedIds }),
+  });
+}
+
+export function createAdminFeature(productId: number, input: FeatureInput): Promise<ProductFeature> {
+  return adminApiRequest<ProductFeature>(`${productPath(productId)}/features`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateAdminFeature(productId: number, featureId: number, input: Partial<FeatureInput>): Promise<ProductFeature> {
+  return adminApiRequest<ProductFeature>(`${productPath(productId)}/features/${featureId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteAdminFeature(productId: number, featureId: number): Promise<{ message: string }> {
+  return adminApiRequest<{ message: string }>(`${productPath(productId)}/features/${featureId}`, { method: "DELETE" });
+}
+
+export function reorderAdminFeatures(productId: number, orderedIds: number[]): Promise<ProductFeature[]> {
+  return adminApiRequest<ProductFeature[]>(`${productPath(productId)}/features/reorder`, {
+    method: "PATCH",
+    body: JSON.stringify({ orderedIds }),
+  });
+}
+
+export function createAdminMediaAssignment(productId: number, input: MediaAssignmentInput): Promise<ProductMediaAssignment> {
+  return adminApiRequest<ProductMediaAssignment>(`${productPath(productId)}/media`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateAdminMediaAssignment(
+  productId: number,
+  assignmentId: number,
+  input: { title?: string | null; caption?: string | null; displayOrder?: number; active?: boolean },
+): Promise<ProductMediaAssignment> {
+  return adminApiRequest<ProductMediaAssignment>(`${productPath(productId)}/media/${assignmentId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteAdminMediaAssignment(productId: number, assignmentId: number): Promise<{ message: string }> {
+  return adminApiRequest<{ message: string }>(`${productPath(productId)}/media/${assignmentId}`, { method: "DELETE" });
+}
+
+export function reorderAdminMediaAssignments(productId: number, mediaRole: ProductMediaRole, orderedIds: number[]): Promise<ProductMediaAssignment[]> {
+  return adminApiRequest<ProductMediaAssignment[]>(`${productPath(productId)}/media/reorder`, {
+    method: "PATCH",
+    body: JSON.stringify({ mediaRole, orderedIds }),
   });
 }
 
