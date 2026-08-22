@@ -32,6 +32,10 @@ const TONE_CLASSES: Record<string, string> = {
   // newsletter subscriber statuses
   subscribed: "bg-mint-sage text-text-primary",
   unsubscribed: "bg-deep-brown/10 text-deep-brown",
+  // contact enquiry statuses ("resolved" reuses the return-status tone above)
+  new: "bg-yellow-card text-text-primary",
+  in_progress: "bg-orange-hero text-text-primary",
+  closed: "bg-deep-brown/10 text-deep-brown",
 };
 
 export function StatusBadge({ status }: { status: string }) {
