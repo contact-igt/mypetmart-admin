@@ -158,6 +158,19 @@ export type BulkUpdateOrderStatusResult = {
   skipped: number;
 };
 
+// Mirrors backend OrderModels/order.types.ts UpdateOrderShippingAddressInput.
+// Full replacement of the Order's own shipping snapshot only — never the
+// customer's saved Address book entry.
+export type UpdateOrderShippingAddressInput = {
+  recipientName: string;
+  phone: string;
+  line1: string;
+  line2?: string;
+  city: string;
+  state: string;
+  postalCode: string;
+};
+
 function orderPath(orderId: number | string): string {
   return `/admin/orders/${encodeURIComponent(String(orderId))}`;
 }
@@ -182,6 +195,13 @@ export function updateAdminOrderStatus(orderId: number | string, status: OrderSt
   return adminApiRequest<AdminOrderDetail>(`${orderPath(orderId)}/status`, {
     method: "PATCH",
     body: JSON.stringify({ status })
+  });
+}
+
+export function updateAdminOrderShippingAddress(orderId: number | string, input: UpdateOrderShippingAddressInput): Promise<AdminOrderDetail> {
+  return adminApiRequest<AdminOrderDetail>(`${orderPath(orderId)}/shipping-address`, {
+    method: "PATCH",
+    body: JSON.stringify(input)
   });
 }
 

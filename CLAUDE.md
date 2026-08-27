@@ -90,8 +90,19 @@ that still requires separate approval.
 Full exclusion list → `docs/PROJECT_BRIEF.md`
 
 ## Unconfirmed public claims (do not publish as fact until approved)
-Cash on Delivery · pan-India shipping · fixed delivery times · verified-review
-claims · customer ratings · low-stock labels · ranking timelines.
+Pan-India shipping · fixed delivery times · verified-review claims · customer
+ratings · low-stock labels · ranking timelines.
+
+**Override (2026-08-26): Cash on Delivery Phase 1 approved.** The blanket
+"Cash on Delivery" exclusion above no longer applies. Scope approved: COD as
+a second payment method alongside PayU — see mypetmart-frontend/CLAUDE.md's
+matching note for the full backend/frontend scope. This admin app's Order
+detail view (`src/components/admin/orders/order-detail-view.tsx`) displays
+COD Payment records (provider/method/status) through the existing Payment
+projection with no new component, and the "Create shipment" action now also
+accepts a confirmed COD Order. Still excluded and NOT built: an admin "mark
+COD collected" action, COD refund handling, and COD order limits/pincode
+restrictions — those still require separate approval.
 
 All open items → `docs/OPEN_ITEMS.md`
 
