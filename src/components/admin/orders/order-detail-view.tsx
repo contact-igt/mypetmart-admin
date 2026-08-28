@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useState } from "react";
-import { addAdminOrderNote, getAdminOrder, updateAdminOrderStatus, type OrderStatus } from "@/lib/api/admin-order-api";
+import { addAdminOrderNote, getAdminOrder, updateAdminOrderShippingAddress, updateAdminOrderStatus, type OrderStatus, type UpdateOrderShippingAddressInput } from "@/lib/api/admin-order-api";
 import { getValidNextOrderStatuses, isDestructiveOrderTransition } from "@/data/admin/order-status-rules";
 import { useAdminData } from "../ui/use-admin-data";
 import { LoadingState, ErrorState } from "../ui/empty-state";
@@ -10,8 +10,9 @@ import { StatusBadge } from "../ui/status-badge";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import { useToast } from "../ui/toast";
 import { MailIcon, PhoneIcon, ReturnIcon } from "@/components/icons";
-import { createOrderShipment } from "@/lib/api/admin-shipment-api";
 import { ShipmentPanel } from "@/components/admin/shipments/shipment-panel";
+import { CourierSelectionDialog } from "@/components/admin/shipments/courier-selection-dialog";
+import { EditShippingAddressDialog } from "@/components/admin/orders/edit-shipping-address-dialog";
 
 const currency = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 });
 
@@ -57,14 +58,28 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
   // ---- internal notes ----
   const [note, setNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
-  const [creatingShipment, setCreatingShipment] = useState(false);
+  // Courier Selection Dialog owns the quote → select → confirm → book flow
+  // itself (see courier-selection-dialog.tsx); this page just opens it.
+  const [selectingCourier, setSelectingCourier] = useState(false);
 
-  async function handleCreateShipment() {
+  // ---- delivery address (Order's own shipping snapshot — never the
+  // customer's saved Address book) ----
+  const [editingAddress, setEditingAddress] = useState(false);
+  const [savingAddress, setSavingAddress] = useState(false);
+
+  async function handleUpdateAddress(input: UpdateOrderShippingAddressInput) {
     if (!order) return;
-    setCreatingShipment(true);
-    try { await createOrderShipment(order.id); showToast("Shipment creation started."); }
-    catch (err) { showToast(err instanceof Error ? err.message : "Could not create the shipment.", "error"); }
-    finally { reload(); setCreatingShipment(false); }
+    setSavingAddress(true);
+    try {
+      await updateAdminOrderShippingAddress(order.id, input);
+      setEditingAddress(false);
+      showToast("Address updated successfully. You can now retry shipment.");
+      reload();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Could not update the delivery address.", "error");
+    } finally {
+      setSavingAddress(false);
+    }
   }
 
   async function handleAddNote(event: React.FormEvent) {
@@ -169,7 +184,12 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
               ) : (
                 <p className="mt-2 text-sm font-medium text-text-primary/70">Guest</p>
               )}
-              <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-text-primary/50">Delivery address</p>
+              <div className="mt-3 flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wide text-text-primary/50">Delivery address</p>
+                <button type="button" onClick={() => setEditingAddress(true)} className="text-xs font-semibold text-primary-orange hover:underline">
+                  Edit
+                </button>
+              </div>
               <p className="mt-1 text-sm text-text-primary/80">{order.shippingAddress.recipientName}</p>
               <p className="text-sm text-text-primary/80">{order.shippingAddress.line1}</p>
               {order.shippingAddress.line2 && <p className="text-sm text-text-primary/80">{order.shippingAddress.line2}</p>}
@@ -210,8 +230,8 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
                     <div key={payment.id} className="rounded-lg border border-border-subtle p-3">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-text-primary">
-                          {payment.provider}
-                          {payment.method ? ` · ${payment.method}` : ""}
+                          {payment.provider === "cod" ? "Cash on Delivery" : payment.provider}
+                          {payment.method && payment.method !== "cod" ? ` · ${payment.method}` : ""}
                         </span>
                         <StatusBadge status={payment.status} />
                       </div>
@@ -246,17 +266,17 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
                 <StatusBadge status={order.paymentStatus} />
               </div>
               <p className="mt-2 text-xs text-text-primary/50">
-                Read-only — payment status is provider-authoritative (verified via PayU webhook/Verify Payment API); it cannot be
-                hand-set here.
+                Read-only — payment status is provider-authoritative (verified via PayU webhook/Verify Payment API, or set at Cash
+                on Delivery confirmation); it cannot be hand-set here.
               </p>
             </div>
           </div>
 
           <div className="rounded-xl border border-border-subtle bg-white p-5">
             <h2 className="text-sm font-semibold text-text-primary">Shipping &amp; fulfilment</h2>
-            <div className="mt-3"><ShipmentPanel shipment={order.shipment ?? order.shipments.find((shipment) => shipment.sourceType === "order")} onChanged={reload} /></div>
-            {!order.shipment && !order.shipments.some((shipment) => shipment.sourceType === "order") && order.paymentStatus === "paid" && order.status === "confirmed" && !order.commerceException && (
-              <button type="button" onClick={handleCreateShipment} disabled={creatingShipment} className="mt-3 rounded-lg bg-primary-orange px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-50">{creatingShipment ? "Creating shipment…" : "Create shipment"}</button>
+            <div className="mt-3"><ShipmentPanel shipment={order.shipment ?? order.shipments.find((shipment) => shipment.sourceType === "order")} onChanged={reload} onEditAddress={() => setEditingAddress(true)} /></div>
+            {!order.shipment && !order.shipments.some((shipment) => shipment.sourceType === "order") && (order.paymentStatus === "paid" || order.payments.some((payment) => payment.provider === "cod")) && order.status === "confirmed" && !order.commerceException && (
+              <button type="button" onClick={() => setSelectingCourier(true)} className="mt-3 rounded-lg bg-primary-orange px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-50">Create shipment</button>
             )}
             <div className="mt-3 flex items-center justify-between border-t border-border-subtle pt-3">
               <span className="text-xs font-semibold uppercase tracking-wide text-text-primary/50">Fulfilment status</span>
@@ -363,6 +383,24 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
         }
         confirmLabel={nextStatus === "cancelled" ? "Cancel order" : "Confirm"}
         loading={updatingStatus}
+      />
+
+      <EditShippingAddressDialog
+        open={editingAddress}
+        onClose={() => setEditingAddress(false)}
+        onSubmit={handleUpdateAddress}
+        address={order.shippingAddress}
+        saving={savingAddress}
+      />
+
+      <CourierSelectionDialog
+        open={selectingCourier}
+        onClose={() => setSelectingCourier(false)}
+        orderId={order.id}
+        onCreated={() => {
+          showToast("Shipment created.");
+          reload();
+        }}
       />
     </div>
   );

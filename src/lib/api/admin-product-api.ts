@@ -47,6 +47,40 @@ export type ProductFeature = {
   updatedAt: string;
 };
 
+export type ProductSpecification = {
+  id: number;
+  label: string;
+  value: string;
+  displayOrder: number;
+};
+
+export type ProductFaq = {
+  id: number;
+  question: string;
+  answer: string;
+  displayOrder: number;
+};
+
+export type ProductContentLayout = "media_left" | "media_right" | "media_full";
+
+export type ProductContentBlock = {
+  id: number;
+  mediaAssetId: number | null;
+  heading: string | null;
+  description: string | null;
+  layout: ProductContentLayout;
+  displayOrder: number;
+  active: boolean;
+  media: {
+    id: number;
+    publicUrl: string;
+    mediaType: "image" | "video";
+    mimeType: string;
+    title: string | null;
+    originalName: string;
+  } | null;
+};
+
 export type ProductMediaRole = "product_video" | "testimonial_video";
 
 export type ProductMediaAssignment = {
@@ -100,11 +134,17 @@ export type ProductDetail = ProductListItem & {
   tags: string[];
   metaTitle: string | null;
   metaDescription: string | null;
+  howToUse: string | null;
+  careInstructions: string | null;
+  safetyInfo: string | null;
   variants: ProductVariant[];
   images: ProductImage[];
   features: ProductFeature[];
+  specifications: ProductSpecification[];
+  contentBlocks: ProductContentBlock[];
   productVideos: ProductMediaAssignment[];
   testimonialVideos: ProductMediaAssignment[];
+  faqs: ProductFaq[];
 };
 
 export type VariantInput = {
@@ -126,11 +166,32 @@ export type FeatureInput = {
   displayOrder?: number;
 };
 
+export type SpecificationInput = {
+  label: string;
+  value: string;
+  displayOrder?: number;
+};
+
+export type FaqInput = {
+  question: string;
+  answer: string;
+  displayOrder?: number;
+};
+
 export type MediaAssignmentInput = {
   mediaAssetId: number;
   mediaRole: ProductMediaRole;
   title?: string | null;
   caption?: string | null;
+  displayOrder?: number;
+  active?: boolean;
+};
+
+export type ContentBlockInput = {
+  mediaAssetId?: number | null;
+  heading?: string | null;
+  description?: string | null;
+  layout?: ProductContentLayout;
   displayOrder?: number;
   active?: boolean;
 };
@@ -153,6 +214,9 @@ export type ProductInput = {
   lengthCm?: string | null;
   widthCm?: string | null;
   heightCm?: string | null;
+  howToUse?: string | null;
+  careInstructions?: string | null;
+  safetyInfo?: string | null;
 };
 
 // Mirrors backend/src/models/ProductModels/product.validation.ts exactly.
@@ -172,7 +236,10 @@ export type CreateProductInput = ProductInput & {
   hasVariants: boolean;
   variants?: VariantInput[];
   features?: FeatureInput[];
+  specifications?: SpecificationInput[];
+  contentBlocks?: ContentBlockInput[];
   mediaAssignments?: MediaAssignmentInput[];
+  faqs?: FaqInput[];
 };
 
 export type ProductListResult = {
@@ -327,6 +394,81 @@ export function deleteAdminFeature(productId: number, featureId: number): Promis
 
 export function reorderAdminFeatures(productId: number, orderedIds: number[]): Promise<ProductFeature[]> {
   return adminApiRequest<ProductFeature[]>(`${productPath(productId)}/features/reorder`, {
+    method: "PATCH",
+    body: JSON.stringify({ orderedIds }),
+  });
+}
+
+export function createAdminSpecification(productId: number, input: SpecificationInput): Promise<ProductSpecification> {
+  return adminApiRequest<ProductSpecification>(`${productPath(productId)}/specifications`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateAdminSpecification(productId: number, specificationId: number, input: Partial<SpecificationInput>): Promise<ProductSpecification> {
+  return adminApiRequest<ProductSpecification>(`${productPath(productId)}/specifications/${specificationId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteAdminSpecification(productId: number, specificationId: number): Promise<{ message: string }> {
+  return adminApiRequest<{ message: string }>(`${productPath(productId)}/specifications/${specificationId}`, { method: "DELETE" });
+}
+
+export function reorderAdminSpecifications(productId: number, orderedIds: number[]): Promise<ProductSpecification[]> {
+  return adminApiRequest<ProductSpecification[]>(`${productPath(productId)}/specifications/reorder`, {
+    method: "PATCH",
+    body: JSON.stringify({ orderedIds }),
+  });
+}
+
+export function createAdminFaq(productId: number, input: FaqInput): Promise<ProductFaq> {
+  return adminApiRequest<ProductFaq>(`${productPath(productId)}/faqs`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateAdminFaq(productId: number, faqId: number, input: Partial<FaqInput>): Promise<ProductFaq> {
+  return adminApiRequest<ProductFaq>(`${productPath(productId)}/faqs/${faqId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteAdminFaq(productId: number, faqId: number): Promise<{ message: string }> {
+  return adminApiRequest<{ message: string }>(`${productPath(productId)}/faqs/${faqId}`, { method: "DELETE" });
+}
+
+export function reorderAdminFaqs(productId: number, orderedIds: number[]): Promise<ProductFaq[]> {
+  return adminApiRequest<ProductFaq[]>(`${productPath(productId)}/faqs/reorder`, {
+    method: "PATCH",
+    body: JSON.stringify({ orderedIds }),
+  });
+}
+
+export function createAdminContentBlock(productId: number, input: ContentBlockInput): Promise<ProductContentBlock> {
+  return adminApiRequest<ProductContentBlock>(`${productPath(productId)}/content-blocks`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateAdminContentBlock(productId: number, blockId: number, input: Partial<ContentBlockInput>): Promise<ProductContentBlock> {
+  return adminApiRequest<ProductContentBlock>(`${productPath(productId)}/content-blocks/${blockId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteAdminContentBlock(productId: number, blockId: number): Promise<{ message: string }> {
+  return adminApiRequest<{ message: string }>(`${productPath(productId)}/content-blocks/${blockId}`, { method: "DELETE" });
+}
+
+export function reorderAdminContentBlocks(productId: number, orderedIds: number[]): Promise<ProductContentBlock[]> {
+  return adminApiRequest<ProductContentBlock[]>(`${productPath(productId)}/content-blocks/reorder`, {
     method: "PATCH",
     body: JSON.stringify({ orderedIds }),
   });

@@ -25,6 +25,11 @@ const TONE_CLASSES: Record<string, string> = {
   approved: "bg-mint-sage text-text-primary",
   rejected: "bg-terracotta/15 text-terracotta",
   resolved: "bg-primary-orange/15 text-primary-orange",
+  // return shipment (reverse pickup) statuses — pending/approved/delivered/
+  // failed/cancelled already covered by other domains above
+  pickup_scheduled: "bg-peach-hero text-text-primary",
+  picked_up: "bg-mint-sage text-text-primary",
+  in_transit: "bg-mint-sage text-text-primary",
   // refund statuses
   succeeded: "bg-mint-sage text-text-primary",
   stock_unavailable: "bg-yellow-card text-text-primary",

@@ -6,6 +6,7 @@ import {
   ReceiptIcon,
   UsersIcon,
   ReturnIcon,
+  StarIcon,
   ChartIcon,
   GearIcon,
   MailIcon,
@@ -43,6 +44,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
       { label: "Shipments", href: "/admin/shipments", icon: BoxIcon },
       { label: "Customers", href: "/admin/customers", icon: UsersIcon },
       { label: "Returns", href: "/admin/returns", icon: ReturnIcon },
+      { label: "Product Reviews", href: "/admin/product-reviews", icon: StarIcon },
       { label: "Newsletter", href: "/admin/newsletter", icon: MailIcon },
       { label: "Contact Enquiries", href: "/admin/contact-enquiries", icon: MailIcon },
     ],
@@ -96,6 +98,7 @@ export function getBreadcrumbs(pathname: string): Breadcrumb[] {
       returns: "Return detail",
       shipments: "Shipment detail",
       "contact-enquiries": "Enquiry detail",
+      "product-reviews": "Review detail",
     };
     crumbs.push({ label: detailLabel[section] ?? "Detail" });
   }

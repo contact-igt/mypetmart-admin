@@ -2,13 +2,26 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { cancelShipment, reattemptShipment, refreshShipment, requestShipmentRto, type Shipment } from "@/lib/api/admin-shipment-api";
+import { cancelShipment, reattemptShipment, refreshShipment, requestShipmentRto, retryShipment, type Shipment } from "@/lib/api/admin-shipment-api";
 import { StatusBadge } from "@/components/admin/ui/status-badge";
 import { useToast } from "@/components/admin/ui/toast";
 
 function formatDateTime(value: string): string { return new Date(value).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); }
 
-export function ShipmentPanel({ shipment, onChanged }: { shipment?: Shipment | null; onChanged?: () => void }) {
+export function ShipmentPanel({
+  shipment,
+  onChanged,
+  onEditAddress,
+}: {
+  shipment?: Shipment | null;
+  onChanged?: () => void;
+  // Optional — only the Order detail page wires this up (it owns the Edit
+  // Delivery Address dialog). Omitted by shipment-detail-view.tsx and
+  // return-detail-view.tsx, which simply don't render the button; a
+  // Replacement shipment's address comes from its original Order, not
+  // something this panel edits directly.
+  onEditAddress?: () => void;
+}) {
   const { showToast } = useToast();
   const [busy, setBusy] = useState(false);
   const [date, setDate] = useState("");
@@ -36,7 +49,46 @@ export function ShipmentPanel({ shipment, onChanged }: { shipment?: Shipment | n
         </div>
         <StatusBadge status={shipment.status} />
       </div>
+      {/* Current provider-status headline — the shipment's own most recent
+          provider_status/provider_status_code (distinct from each tracking
+          event's own providerStatus shown further below). Only shown when
+          the backend actually captured a real value and the shipment isn't
+          "failed" (that case already has its own richer Reason/Provider
+          block from failureReason below) — never fabricated. */}
+      {shipment.status !== "failed" && shipment.providerStatus && (
+        <dl className="grid grid-cols-2 gap-1 rounded-lg bg-cream-bg p-3 text-xs text-text-primary/80 sm:grid-cols-4">
+          <div><dt className="font-semibold">Courier status</dt><dd>{shipment.providerStatusCode ?? "—"}</dd></div>
+          <div className="sm:col-span-3"><dt className="font-semibold">Provider status</dt><dd>{shipment.providerStatus}</dd></div>
+        </dl>
+      )}
       {shipment.status === "provider_status_unknown" && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs font-semibold text-amber-800">Provider outcome is uncertain. Reconcile this shipment; do not create another.</p>}
+      {shipment.status === "failed" && (
+        <div className="rounded-lg border border-terracotta/40 bg-terracotta/5 p-3">
+          <p className="text-xs font-bold text-terracotta">Shipment Failed</p>
+          {/* Only ever shown when the backend actually captured a real
+              provider reason (see failureReason) — never a fabricated one. */}
+          {shipment.failureReason && (
+            <dl className="mt-2 space-y-1 text-xs text-text-primary/80">
+              <div><dt className="inline font-semibold">Reason: </dt><dd className="inline">{shipment.failureReason.message}</dd></div>
+              <div><dt className="inline font-semibold">Provider: </dt><dd className="inline capitalize">{shipment.failureReason.provider}</dd></div>
+              {/* Serviceability failures (no courier covers this pincode/payment
+                  mode) are specifically fixable by correcting the address —
+                  point the admin at the exact next step instead of a generic
+                  "something went wrong". Other rejection codes get no
+                  suggestion here rather than a guess that might not apply. */}
+              {shipment.failureReason.errorCode === "SERVICEABILITY_FAILED" && (
+                <div><dt className="inline font-semibold">Suggested action: </dt><dd className="inline">Update the delivery address and retry.</dd></div>
+              )}
+            </dl>
+          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {onEditAddress && shipment.sourceType === "order" && (
+              <button type="button" onClick={onEditAddress} className="rounded-lg border border-terracotta px-3 py-2 text-xs font-semibold text-terracotta disabled:opacity-50">Edit Delivery Address</button>
+            )}
+            <button disabled={busy} onClick={() => act("Retrying shipment…", () => retryShipment(shipment.id))} className="rounded-lg bg-primary-orange px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Retry Shipment</button>
+          </div>
+        </div>
+      )}
       <dl className="grid grid-cols-2 gap-2 text-xs text-text-primary/70 sm:grid-cols-4">
         <div><dt className="font-semibold">Provider cost</dt><dd>{shipment.providerCost ? `${shipment.currency} ${shipment.providerCost}` : "—"}</dd></div>
         <div><dt className="font-semibold">Package</dt><dd>{shipment.package.weightGrams} g</dd></div>
