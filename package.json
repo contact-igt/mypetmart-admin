@@ -12,6 +12,7 @@
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "test:reports": "node scripts/reports-csv.test.mjs",
+    "test:refund-ui": "node --test scripts/refund-eligibility.test.mjs",
     "dev:admin": "next dev -p 4000",
     "build:admin": "next build",
     "lint:admin": "eslint src",

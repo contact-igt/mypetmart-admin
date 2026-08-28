@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useState } from "react";
-import { addAdminReturnNote, getAdminReturn, initiateAdminRefund, markReturnItemReceived, recheckAdminRefund, reviewAdminReturn, updateAdminReplacement } from "@/lib/api/admin-return-api";
+import { addAdminReturnNote, createReturnShipment, getAdminReturn, initiateAdminRefund, markReturnItemReceived, recheckAdminRefund, reviewAdminReturn, updateAdminReplacement } from "@/lib/api/admin-return-api";
 import { useAdminAuth } from "@/context/admin-auth-context";
 import { useAdminData } from "../ui/use-admin-data";
 import { LoadingState, ErrorState } from "../ui/empty-state";
@@ -11,6 +11,7 @@ import { useToast } from "../ui/toast";
 import { ArrowRightIcon } from "@/components/icons";
 import { createReplacementShipment } from "@/lib/api/admin-shipment-api";
 import { ShipmentPanel } from "@/components/admin/shipments/shipment-panel";
+import { requiresManualCodRefund } from "@/lib/refund-eligibility";
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return "—";
@@ -41,6 +42,7 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
   const [recheckingRefundId, setRecheckingRefundId] = useState<number | null>(null);
   const [updatingReplacement, setUpdatingReplacement] = useState(false);
   const [creatingShipment, setCreatingShipment] = useState(false);
+  const [creatingReturnShipment, setCreatingReturnShipment] = useState(false);
 
   async function handleMarkReceived() {
     if (!request) return;
@@ -127,6 +129,20 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
     }
   }
 
+  async function handleCreateReturnShipment() {
+    if (!request) return;
+    setCreatingReturnShipment(true);
+    try {
+      await createReturnShipment(request.id);
+      showToast("Return pickup scheduled.");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Could not create the return shipment.", "error");
+    } finally {
+      reload();
+      setCreatingReturnShipment(false);
+    }
+  }
+
   async function handleCreateReplacementShipment() {
     if (!request?.replacement) return;
     setCreatingShipment(true);
@@ -141,10 +157,12 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
   const canReview = request.status === "requested";
   const canMarkReceived = (request.status === "requested" || request.status === "approved") && !request.itemReceivedAt;
   const blockedByItemReceived = request.resolution === "replacement" && canReview && !request.itemReceivedAt;
+  const isManualCodRefund = requiresManualCodRefund(request.paymentProvider, request.paymentMethod);
   const canInitiateRefund =
     request.resolution === "refund" &&
     request.status === "approved" &&
     Boolean(request.itemReceivedAt) &&
+    !isManualCodRefund &&
     !request.refunds.some((r) => r.status === "pending" || r.status === "processing" || r.status === "succeeded");
 
   return (
@@ -198,6 +216,62 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
           </div>
 
           <div className="rounded-xl border border-border-subtle bg-white p-5">
+            <h2 className="text-sm font-semibold text-text-primary">Return Shipment</h2>
+            <p className="mt-1 text-xs text-text-primary/50">Books a reverse courier pickup from the customer&apos;s delivery address back to our warehouse.</p>
+            {!request.returnShipment ? (
+              request.status === "approved" ? (
+                <>
+                  <p className="mt-3 text-sm text-text-primary/70">Not Created</p>
+                  <button
+                    type="button"
+                    onClick={handleCreateReturnShipment}
+                    disabled={creatingReturnShipment}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-primary-orange px-3.5 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                  >
+                    {creatingReturnShipment ? "Creating…" : "Create Return Pickup"}
+                  </button>
+                </>
+              ) : (
+                <p className="mt-3 text-xs text-text-primary/50">Approve this return before a pickup can be scheduled.</p>
+              )
+            ) : (
+              <div className="mt-3 rounded-lg border border-border-subtle bg-cream-bg p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-mono text-xs font-medium">{request.returnShipment.shipmentNumber}</span>
+                  <StatusBadge status={request.returnShipment.status} />
+                </div>
+                <dl className="mt-2 grid grid-cols-2 gap-2 text-xs text-text-primary/70 sm:grid-cols-4">
+                  <div><dt className="font-semibold">Courier</dt><dd>{request.returnShipment.carrier ?? "—"}</dd></div>
+                  <div><dt className="font-semibold">AWB</dt><dd className="font-mono">{request.returnShipment.awbNumber ?? "Pending"}</dd></div>
+                  <div><dt className="font-semibold">Status</dt><dd>{request.returnShipment.providerStatus ?? "—"}</dd></div>
+                  <div>
+                    <dt className="font-semibold">Tracking</dt>
+                    <dd>
+                      {request.returnShipment.trackingUrl ? (
+                        <a href={request.returnShipment.trackingUrl} target="_blank" rel="noreferrer" className="text-primary-orange hover:underline">View</a>
+                      ) : "—"}
+                    </dd>
+                  </div>
+                </dl>
+                {request.returnShipment.status === "failed" && request.returnShipment.failureReason && (
+                  <p className="mt-2 text-xs text-terracotta">{request.returnShipment.failureReason.message}</p>
+                )}
+                {request.returnShipment.trackingEvents.length > 0 && (
+                  <ol className="mt-3 space-y-2 border-l-2 border-primary-orange/25 pl-3">
+                    {request.returnShipment.trackingEvents.map((event) => (
+                      <li key={event.id} className="text-xs">
+                        <p className="font-semibold text-text-primary">{event.providerStatus}</p>
+                        <p className="text-text-primary/60">{[event.location, event.message].filter(Boolean).join(" · ")}</p>
+                        <time className="text-text-primary/45">{formatDateTime(event.eventAt)}</time>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-border-subtle bg-white p-5">
             <h2 className="text-sm font-semibold text-text-primary">Review</h2>
             <p className="mt-1 text-xs text-text-primary/50">
               {request.resolution === "replacement"
@@ -243,7 +317,11 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
             <h2 className="text-sm font-semibold text-text-primary">Refund</h2>
             <p className="mt-1 text-xs text-text-primary/50">Maximum refundable amount: ₹{request.maxRefundableAmount}</p>
 
-            {request.refunds.length === 0 && !canInitiateRefund && (
+            {isManualCodRefund && (
+              <p className="mt-3 text-xs font-medium text-text-primary/70">COD refund — manual processing required.</p>
+            )}
+
+            {request.refunds.length === 0 && !canInitiateRefund && !isManualCodRefund && (
               <p className="mt-3 text-xs text-text-primary/50">
                 {!isSuperAdmin
                   ? "Only a Super Admin can initiate a refund."

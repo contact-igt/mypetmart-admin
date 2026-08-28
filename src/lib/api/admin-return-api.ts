@@ -27,6 +27,50 @@ export type ReplacementSummary = {
   shipment?: Shipment | null;
 };
 
+export type ReturnShipmentStatus = "pending" | "approved" | "pickup_scheduled" | "picked_up" | "in_transit" | "delivered" | "failed" | "cancelled";
+
+export type ReturnShipmentFailureReason = {
+  provider: string;
+  errorCode: string;
+  message: string;
+  failedAt: string;
+} | null;
+
+export type ReturnShipmentTrackingEvent = {
+  id: number;
+  status: ReturnShipmentStatus;
+  providerStatus: string;
+  providerStatusCode: string | null;
+  location: string | null;
+  message: string | null;
+  eventAt: string;
+};
+
+// Mirrors backend/src/models/ReturnShipmentModels/return-shipment.types.ts's
+// ReturnShipmentJSON field-for-field — deliberately its own type, not a
+// reuse of admin-shipment-api.ts's Shipment (a reverse pickup is a
+// different business entity from a forward Shipment; see the Phase F.1
+// report's Architecture Decision).
+export type ReturnShipment = {
+  id: number;
+  returnRequestId: number;
+  shipmentNumber: string;
+  provider: string;
+  carrier: string | null;
+  awbNumber: string | null;
+  serviceType: string | null;
+  status: ReturnShipmentStatus;
+  providerStatus: string | null;
+  failureReason: ReturnShipmentFailureReason;
+  trackingUrl: string | null;
+  pickedUpAt: string | null;
+  deliveredAt: string | null;
+  cancelledAt: string | null;
+  lastSyncedAt: string | null;
+  createdAt: string;
+  trackingEvents: ReturnShipmentTrackingEvent[];
+};
+
 export type ReturnRefundSummary = {
   id: number;
   refundNumber: string;
@@ -65,12 +109,17 @@ export type AdminReturnListItem = {
   itemReceivedAt: string | null;
   refunds: ReturnRefundSummary[];
   replacement: ReplacementSummary | null;
+  // null when no reverse pickup has been created yet for this return —
+  // never fabricated.
+  returnShipment: ReturnShipment | null;
 };
 
 export type AdminReturnDetail = AdminReturnListItem & {
   notes: ReturnNote[];
   maxRefundableAmount: string;
   currency: string;
+  paymentProvider: string | null;
+  paymentMethod: string | null;
 };
 
 export type ListAdminReturnsParams = {
@@ -164,5 +213,18 @@ export function updateAdminReplacement(returnId: number | string, status: "proce
   return adminApiRequest<ReplacementSummary>(`${returnPath(returnId)}/replacement`, {
     method: "PATCH",
     body: JSON.stringify({ status })
+  });
+}
+
+/**
+ * Books a reverse pickup with the courier for an approved return request.
+ * Backend-gated (RETURN_SHIPMENT_NOT_ELIGIBLE unless the return is already
+ * "approved"; RETURN_SHIPMENT_ALREADY_EXISTS on a repeat call) — this is a
+ * thin passthrough, no client-side eligibility duplicated here.
+ */
+export function createReturnShipment(returnId: number | string): Promise<ReturnShipment> {
+  return adminApiRequest<ReturnShipment>(`${returnPath(returnId)}/create-shipment`, {
+    method: "POST",
+    body: JSON.stringify({})
   });
 }
