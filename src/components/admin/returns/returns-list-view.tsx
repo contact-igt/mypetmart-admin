@@ -9,7 +9,7 @@ import { DataTable, type Column } from "../ui/data-table";
 import { Pagination } from "../ui/pagination";
 import { StatusBadge } from "../ui/status-badge";
 
-const STATUSES: ReturnStatus[] = ["requested", "approved", "rejected", "resolved"];
+const STATUSES: ReturnStatus[] = ["requested", "approved", "rejected", "resolved", "cancelled"];
 const PAGE_SIZE = 10;
 
 function formatDate(iso: string): string {

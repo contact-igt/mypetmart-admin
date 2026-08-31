@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useState } from "react";
-import { addAdminReturnNote, createReturnShipment, getAdminReturn, initiateAdminRefund, markReturnItemReceived, recheckAdminRefund, reviewAdminReturn, updateAdminReplacement } from "@/lib/api/admin-return-api";
+import { addAdminReturnNote, cancelAdminReturn, createReturnShipment, getAdminReturn, initiateAdminRefund, markReturnItemReceived, refreshReturnShipment, recheckAdminRefund, reviewAdminReturn, updateAdminReplacement, type ReturnShipment } from "@/lib/api/admin-return-api";
 import { useAdminAuth } from "@/context/admin-auth-context";
 import { useAdminData } from "../ui/use-admin-data";
 import { LoadingState, ErrorState } from "../ui/empty-state";
@@ -12,6 +12,7 @@ import { ArrowRightIcon } from "@/components/icons";
 import { createReplacementShipment } from "@/lib/api/admin-shipment-api";
 import { ShipmentPanel } from "@/components/admin/shipments/shipment-panel";
 import { requiresManualCodRefund } from "@/lib/refund-eligibility";
+import { ConfirmDialog } from "../ui/confirm-dialog";
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return "—";
@@ -43,6 +44,10 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
   const [updatingReplacement, setUpdatingReplacement] = useState(false);
   const [creatingShipment, setCreatingShipment] = useState(false);
   const [creatingReturnShipment, setCreatingReturnShipment] = useState(false);
+  const [refreshingReturnShipment, setRefreshingReturnShipment] = useState(false);
+  const [refreshedReturnShipment, setRefreshedReturnShipment] = useState<ReturnShipment | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
 
   async function handleMarkReceived() {
     if (!request) return;
@@ -151,6 +156,37 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
     finally { reload(); setCreatingShipment(false); }
   }
 
+  async function handleRefreshReturnShipment() {
+    const shipment = refreshedReturnShipment ?? request?.returnShipment;
+    if (!shipment?.awbNumber || refreshingReturnShipment) return;
+    setRefreshingReturnShipment(true);
+    try {
+      const refreshed = await refreshReturnShipment(shipment.id);
+      setRefreshedReturnShipment(refreshed);
+      reload();
+      showToast("Refresh completed.");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Could not refresh return tracking.", "error");
+    } finally {
+      setRefreshingReturnShipment(false);
+    }
+  }
+
+  async function handleCancelReturn() {
+    if (!request) return;
+    setCancelling(true);
+    try {
+      await cancelAdminReturn(request.id);
+      setCancelConfirmOpen(false);
+      showToast("Return cancelled.");
+      reload();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Could not cancel this return.", "error");
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   if (loading) return <LoadingState label="Loading request…" />;
   if (error || !request) return <ErrorState message={error ?? "Request not found."} onRetry={reload} />;
 
@@ -164,6 +200,8 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
     Boolean(request.itemReceivedAt) &&
     !isManualCodRefund &&
     !request.refunds.some((r) => r.status === "pending" || r.status === "processing" || r.status === "succeeded");
+  const returnShipment = refreshedReturnShipment ?? request.returnShipment;
+  const canCancelReturn = request.canCancel;
 
   return (
     <div className="flex flex-col gap-5">
@@ -183,7 +221,19 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
             · {request.variantName ? `${request.variantName} · ` : ""}Purchased {request.purchasedQuantity} · Requested {request.quantity} · {request.resolution} · {formatDateTime(request.requestedAt)}
           </p>
         </div>
-        <StatusBadge status={request.status} />
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={request.status} />
+          {canCancelReturn && (
+            <button
+              type="button"
+              onClick={() => setCancelConfirmOpen(true)}
+              disabled={cancelling}
+              className="rounded-lg border border-terracotta/40 px-3 py-1.5 text-xs font-semibold text-terracotta hover:bg-terracotta/10 disabled:opacity-50"
+            >
+              Cancel Return
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
@@ -218,7 +268,7 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
           <div className="rounded-xl border border-border-subtle bg-white p-5">
             <h2 className="text-sm font-semibold text-text-primary">Return Shipment</h2>
             <p className="mt-1 text-xs text-text-primary/50">Books a reverse courier pickup from the customer&apos;s delivery address back to our warehouse.</p>
-            {!request.returnShipment ? (
+            {!returnShipment ? (
               request.status === "approved" ? (
                 <>
                   <p className="mt-3 text-sm text-text-primary/70">Not Created</p>
@@ -237,28 +287,56 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
             ) : (
               <div className="mt-3 rounded-lg border border-border-subtle bg-cream-bg p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-mono text-xs font-medium">{request.returnShipment.shipmentNumber}</span>
-                  <StatusBadge status={request.returnShipment.status} />
+                  <span className="font-mono text-xs font-medium">{returnShipment.shipmentNumber}</span>
+                  <StatusBadge status={returnShipment.status} />
                 </div>
                 <dl className="mt-2 grid grid-cols-2 gap-2 text-xs text-text-primary/70 sm:grid-cols-4">
-                  <div><dt className="font-semibold">Courier</dt><dd>{request.returnShipment.carrier ?? "—"}</dd></div>
-                  <div><dt className="font-semibold">AWB</dt><dd className="font-mono">{request.returnShipment.awbNumber ?? "Pending"}</dd></div>
-                  <div><dt className="font-semibold">Status</dt><dd>{request.returnShipment.providerStatus ?? "—"}</dd></div>
+                  <div><dt className="font-semibold">Courier</dt><dd>{returnShipment.carrier ?? "—"}</dd></div>
+                  <div><dt className="font-semibold">AWB</dt><dd className="font-mono">{returnShipment.awbNumber ?? "Pending"}</dd></div>
+                  <div><dt className="font-semibold">Provider</dt><dd>{returnShipment.provider}</dd></div>
+                  <div><dt className="font-semibold">Current Status</dt><dd>{returnShipment.status.replace(/_/g, " ")}</dd></div>
+                  <div><dt className="font-semibold">Provider Status</dt><dd>{returnShipment.providerStatus ?? "—"}</dd></div>
+                  <div><dt className="font-semibold">Provider Status Code</dt><dd>{returnShipment.providerStatusCode ?? "—"}</dd></div>
+                  <div><dt className="font-semibold">Service</dt><dd>{returnShipment.serviceType ?? "—"}</dd></div>
                   <div>
                     <dt className="font-semibold">Tracking</dt>
                     <dd>
-                      {request.returnShipment.trackingUrl ? (
-                        <a href={request.returnShipment.trackingUrl} target="_blank" rel="noreferrer" className="text-primary-orange hover:underline">View</a>
+                      {returnShipment.trackingUrl ? (
+                        <a href={returnShipment.trackingUrl} target="_blank" rel="noreferrer" className="text-primary-orange hover:underline">Open Tracking</a>
                       ) : "—"}
                     </dd>
                   </div>
                 </dl>
-                {request.returnShipment.status === "failed" && request.returnShipment.failureReason && (
-                  <p className="mt-2 text-xs text-terracotta">{request.returnShipment.failureReason.message}</p>
+                <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-border-subtle pt-3 text-xs text-text-primary/70 sm:grid-cols-4">
+                  {returnShipment.lastSyncedAt && <div><dt className="font-semibold">Last Synced</dt><dd>{formatDateTime(returnShipment.lastSyncedAt)}</dd></div>}
+                  {returnShipment.pickedUpAt && <div><dt className="font-semibold">Picked Up</dt><dd>{formatDateTime(returnShipment.pickedUpAt)}</dd></div>}
+                  {returnShipment.deliveredAt && <div><dt className="font-semibold">Delivered</dt><dd>{formatDateTime(returnShipment.deliveredAt)}</dd></div>}
+                  {returnShipment.cancelledAt && <div><dt className="font-semibold">Cancelled</dt><dd>{formatDateTime(returnShipment.cancelledAt)}</dd></div>}
+                </dl>
+                {!returnShipment.awbNumber && (
+                  <p className="mt-3 text-xs text-text-primary/60">Tracking unavailable until an AWB is assigned.</p>
                 )}
-                {request.returnShipment.trackingEvents.length > 0 && (
+                {returnShipment.awbNumber && (
+                  <div className="mt-3 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleRefreshReturnShipment}
+                      disabled={refreshingReturnShipment}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-primary-orange px-3.5 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                    >
+                      {refreshingReturnShipment ? "Refreshing..." : "Refresh Tracking"}
+                    </button>
+                    {refreshedReturnShipment && <span className="text-xs text-text-primary/60" role="status">Refresh completed</span>}
+                  </div>
+                )}
+                {returnShipment.status === "failed" && returnShipment.failureReason && (
+                  <p className="mt-2 text-xs text-terracotta">{returnShipment.failureReason.message}</p>
+                )}
+                {returnShipment.trackingEvents.length === 0 ? (
+                  <p className="mt-3 text-xs text-text-primary/60">No tracking updates available yet. The courier has not provided a scan.</p>
+                ) : (
                   <ol className="mt-3 space-y-2 border-l-2 border-primary-orange/25 pl-3">
-                    {request.returnShipment.trackingEvents.map((event) => (
+                    {returnShipment.trackingEvents.map((event) => (
                       <li key={event.id} className="text-xs">
                         <p className="font-semibold text-text-primary">{event.providerStatus}</p>
                         <p className="text-text-primary/60">{[event.location, event.message].filter(Boolean).join(" · ")}</p>
@@ -436,6 +514,15 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
           </form>
         </div>
       </div>
+      <ConfirmDialog
+        open={cancelConfirmOpen}
+        onClose={() => { if (!cancelling) setCancelConfirmOpen(false); }}
+        onConfirm={() => { void handleCancelReturn(); }}
+        title="Cancel this return?"
+        description="This cancels the return request. It does not initiate or reverse a refund. If a reverse pickup has already progressed beyond its cancellable stage, the cancellation will be rejected safely."
+        confirmLabel="Cancel Return"
+        loading={cancelling}
+      />
     </div>
   );
 }

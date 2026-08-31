@@ -9,7 +9,7 @@ import type { Shipment } from "@/lib/api/admin-shipment-api";
  * (string ids, no Refund concept at all — see the Returns + Refunds report).
  */
 
-export type ReturnStatus = "requested" | "approved" | "rejected" | "resolved";
+export type ReturnStatus = "requested" | "approved" | "rejected" | "resolved" | "cancelled";
 export type RefundStatus = "pending" | "processing" | "succeeded" | "failed";
 export type ReturnResolution = "refund" | "replacement";
 export type ReplacementStatus = "stock_unavailable" | "processing" | "completed";
@@ -61,6 +61,7 @@ export type ReturnShipment = {
   serviceType: string | null;
   status: ReturnShipmentStatus;
   providerStatus: string | null;
+  providerStatusCode: string | null;
   failureReason: ReturnShipmentFailureReason;
   trackingUrl: string | null;
   pickedUpAt: string | null;
@@ -106,6 +107,9 @@ export type AdminReturnListItem = {
   resolutionNote: string | null;
   requestedAt: string;
   resolvedAt: string | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
+  cancellationSource: "customer" | "admin" | null;
   itemReceivedAt: string | null;
   refunds: ReturnRefundSummary[];
   replacement: ReplacementSummary | null;
@@ -120,6 +124,7 @@ export type AdminReturnDetail = AdminReturnListItem & {
   currency: string;
   paymentProvider: string | null;
   paymentMethod: string | null;
+  canCancel: boolean;
 };
 
 export type ListAdminReturnsParams = {
@@ -224,6 +229,20 @@ export function updateAdminReplacement(returnId: number | string, status: "proce
  */
 export function createReturnShipment(returnId: number | string): Promise<ReturnShipment> {
   return adminApiRequest<ReturnShipment>(`${returnPath(returnId)}/create-shipment`, {
+    method: "POST",
+    body: JSON.stringify({})
+  });
+}
+
+export function cancelAdminReturn(returnId: number | string, reason?: string): Promise<AdminReturnDetail> {
+  return adminApiRequest<AdminReturnDetail>(`${returnPath(returnId)}/cancel`, {
+    method: "POST",
+    body: JSON.stringify(reason ? { reason } : {})
+  });
+}
+
+export function refreshReturnShipment(shipmentId: number | string): Promise<ReturnShipment> {
+  return adminApiRequest<ReturnShipment>(`/admin/return-shipments/${encodeURIComponent(String(shipmentId))}/refresh`, {
     method: "POST",
     body: JSON.stringify({})
   });
