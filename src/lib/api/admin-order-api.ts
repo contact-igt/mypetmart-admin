@@ -1,5 +1,6 @@
 import { adminApiRequest } from "@/lib/api/admin-api-client";
 import type { Shipment } from "@/lib/api/admin-shipment-api";
+import { buildAdminOrderActionPath, buildAdminOrderPath, buildAdminOrderQuery, serializeAdminOrderBody } from "./admin-order-contract";
 
 /**
  * Production Order types — mirror backend/src/models/OrderModels/order.types.ts
@@ -101,6 +102,9 @@ export type OrderReturn = {
 };
 
 export type AdminOrderDetail = AdminOrderListItem & {
+  // Present for both authenticated customers and guests. Guest orders have
+  // no customer record, so this is their primary contact identity.
+  contactEmail: string;
   shippingAddress: OrderShippingAddress;
   items: OrderItem[];
   cancelledAt: string | null;
@@ -171,51 +175,43 @@ export type UpdateOrderShippingAddressInput = {
   postalCode: string;
 };
 
-function orderPath(orderId: number | string): string {
-  return `/admin/orders/${encodeURIComponent(String(orderId))}`;
-}
-
 export function getAdminOrderSummary(): Promise<AdminOrderSummary> {
   return adminApiRequest<AdminOrderSummary>("/admin/orders/summary");
 }
 
 export function listAdminOrders(params: ListAdminOrdersParams): Promise<ListAdminOrdersResult> {
-  const query = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== "") query.set(key, String(value));
-  });
-  return adminApiRequest<ListAdminOrdersResult>(`/admin/orders?${query.toString()}`);
+  return adminApiRequest<ListAdminOrdersResult>(`/admin/orders?${buildAdminOrderQuery(params)}`);
 }
 
 export function getAdminOrder(orderId: number | string): Promise<AdminOrderDetail> {
-  return adminApiRequest<AdminOrderDetail>(orderPath(orderId));
+  return adminApiRequest<AdminOrderDetail>(buildAdminOrderPath(orderId));
 }
 
 export function updateAdminOrderStatus(orderId: number | string, status: OrderStatus): Promise<AdminOrderDetail> {
-  return adminApiRequest<AdminOrderDetail>(`${orderPath(orderId)}/status`, {
+  return adminApiRequest<AdminOrderDetail>(buildAdminOrderActionPath(orderId, "status"), {
     method: "PATCH",
-    body: JSON.stringify({ status })
+    body: serializeAdminOrderBody({ status })
   });
 }
 
 export function updateAdminOrderShippingAddress(orderId: number | string, input: UpdateOrderShippingAddressInput): Promise<AdminOrderDetail> {
-  return adminApiRequest<AdminOrderDetail>(`${orderPath(orderId)}/shipping-address`, {
+  return adminApiRequest<AdminOrderDetail>(buildAdminOrderActionPath(orderId, "shipping-address"), {
     method: "PATCH",
-    body: JSON.stringify(input)
+    body: serializeAdminOrderBody(input)
   });
 }
 
 export function bulkUpdateAdminOrderStatus(ids: number[], status: OrderStatus): Promise<BulkUpdateOrderStatusResult> {
   return adminApiRequest<BulkUpdateOrderStatusResult>("/admin/orders/bulk-status", {
     method: "PATCH",
-    body: JSON.stringify({ ids, status })
+    body: serializeAdminOrderBody({ ids, status })
   });
 }
 
 export function addAdminOrderNote(orderId: number | string, message: string): Promise<OrderNote> {
-  return adminApiRequest<OrderNote>(`${orderPath(orderId)}/notes`, {
+  return adminApiRequest<OrderNote>(buildAdminOrderActionPath(orderId, "notes"), {
     method: "POST",
-    body: JSON.stringify({ message })
+    body: serializeAdminOrderBody({ message })
   });
 }
 

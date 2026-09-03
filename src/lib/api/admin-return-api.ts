@@ -59,6 +59,12 @@ export type ReturnShipment = {
   carrier: string | null;
   awbNumber: string | null;
   serviceType: string | null;
+  // The reverse shipping amount charged for this pickup — the rate of the
+  // reverse courier candidate actually booked (iThink Rate API, order_type
+  // "reverse"). null until a rate has been chosen — show an empty state,
+  // never a fabricated ₹ value.
+  shippingAmount: string | null;
+  currency: string;
   status: ReturnShipmentStatus;
   providerStatus: string | null;
   providerStatusCode: string | null;
@@ -70,6 +76,46 @@ export type ReturnShipment = {
   lastSyncedAt: string | null;
   createdAt: string;
   trackingEvents: ReturnShipmentTrackingEvent[];
+};
+
+// Mirrors backend ReturnModels/return-pickup-address.ts ReturnPickupAddressJSON.
+// The effective reverse-pickup address: an admin override (return_requests
+// .pickup_*) resolved over the Order's own shipping snapshot. `edited` is
+// true when an override is set.
+export type ReturnPickupAddress = {
+  recipientName: string;
+  phone: string;
+  line1: string;
+  line2: string | null;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  edited: boolean;
+};
+
+// One reverse-capable courier candidate from a return-shipment quote —
+// mirrors backend ReturnShipmentQuoteOptionJSON. No fabricated fields.
+export type ReturnShipmentQuoteOption = {
+  carrier: string;
+  serviceType: string;
+  rate: string;
+  deliveryTat: number | null;
+  estimatedDelivery: { min: string; max: string } | null;
+};
+export type ReturnShipmentQuoteResult = { options: ReturnShipmentQuoteOption[] };
+// Omitted (undefined) = "use the automatic cheapest reverse courier", the
+// same default the create-shipment button had before the courier picker.
+export type ReturnShipmentCourierSelection = { carrier: string; serviceType: string };
+
+export type UpdateReturnPickupAddressInput = {
+  recipientName: string;
+  phone: string;
+  line1: string;
+  line2?: string;
+  city: string;
+  state: string;
+  postalCode: string;
 };
 
 export type ReturnRefundSummary = {
@@ -120,6 +166,9 @@ export type AdminReturnListItem = {
 
 export type AdminReturnDetail = AdminReturnListItem & {
   notes: ReturnNote[];
+  // Effective reverse-pickup address (override resolved over the Order
+  // snapshot). Detail-only, like returnShipment.
+  pickupAddress: ReturnPickupAddress;
   maxRefundableAmount: string;
   currency: string;
   paymentProvider: string | null;
@@ -222,15 +271,42 @@ export function updateAdminReplacement(returnId: number | string, status: "proce
 }
 
 /**
+ * Read-only reverse rate quote — every reverse-pickup-capable courier iThink
+ * currently offers for this return's pickup address. Creates nothing; the
+ * pick is re-verified against a fresh rate check when the shipment is booked.
+ */
+export function quoteReturnShipment(returnId: number | string): Promise<ReturnShipmentQuoteResult> {
+  return adminApiRequest<ReturnShipmentQuoteResult>(`${returnPath(returnId)}/return-shipment/quote`, {
+    method: "POST",
+    body: "{}"
+  });
+}
+
+/**
  * Books a reverse pickup with the courier for an approved return request.
  * Backend-gated (RETURN_SHIPMENT_NOT_ELIGIBLE unless the return is already
- * "approved"; RETURN_SHIPMENT_ALREADY_EXISTS on a repeat call) — this is a
- * thin passthrough, no client-side eligibility duplicated here.
+ * "approved"; RETURN_SHIPMENT_ALREADY_EXISTS on a repeat call;
+ * RETURN_SHIPMENT_COURIER_SELECTION_INVALID if the pick went stale) — this
+ * is a thin passthrough, no client-side eligibility duplicated here. Omit
+ * `selection` to let the backend pick the cheapest reverse courier.
  */
-export function createReturnShipment(returnId: number | string): Promise<ReturnShipment> {
+export function createReturnShipment(returnId: number | string, selection?: ReturnShipmentCourierSelection): Promise<ReturnShipment> {
   return adminApiRequest<ReturnShipment>(`${returnPath(returnId)}/create-shipment`, {
     method: "POST",
-    body: JSON.stringify({})
+    body: JSON.stringify(selection ?? {})
+  });
+}
+
+/**
+ * Edits the reverse-pickup address snapshot for an approved return. Writes
+ * ONLY return_requests.pickup_* — never the customer's Order shipping
+ * address. Backend rejects the edit once a live reverse pickup exists
+ * (RETURN_PICKUP_ADDRESS_NOT_EDITABLE). Does not create a shipment.
+ */
+export function updateReturnPickupAddress(returnId: number | string, input: UpdateReturnPickupAddressInput): Promise<AdminReturnDetail> {
+  return adminApiRequest<AdminReturnDetail>(`${returnPath(returnId)}/pickup-address`, {
+    method: "PATCH",
+    body: JSON.stringify(input)
   });
 }
 

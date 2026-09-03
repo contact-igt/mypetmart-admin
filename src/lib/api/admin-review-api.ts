@@ -17,6 +17,9 @@ export type AdminReviewListItem = {
   status: ReviewStatus;
   verifiedPurchase: boolean;
   reviewSource: ReviewSource;
+  // Admin-set customer-facing review date ("YYYY-MM-DD") or null. createdAt /
+  // updatedAt below stay the real system audit timestamps — never conflate them.
+  reviewDate: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -33,6 +36,8 @@ export type CreateAdminReviewInput = {
   title?: string | null;
   review: string;
   status?: ReviewStatus;
+  // Optional "YYYY-MM-DD". Omit to store NULL — never send today automatically.
+  reviewDate?: string | null;
 };
 
 export type UpdateAdminReviewInput = {
@@ -40,6 +45,8 @@ export type UpdateAdminReviewInput = {
   title?: string | null;
   review?: string;
   status?: ReviewStatus;
+  // Omit to keep the stored review date; null clears it; "YYYY-MM-DD" sets it.
+  reviewDate?: string | null;
 };
 
 export type ListAdminReviewsParams = {

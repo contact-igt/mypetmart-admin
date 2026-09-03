@@ -3,7 +3,7 @@ import { AdminShell } from "@/components/admin/shell/admin-shell";
 
 export const metadata: Metadata = {
   title: { template: "%s | MyPetMart Admin", default: "Admin | MyPetMart" },
-  description: "MyPetMart admin panel (demo data).",
+  description: "MyPetMart admin panel. Orders and Customers use live backend data; other modules may still use demo data.",
   robots: { index: false, follow: false },
 };
 

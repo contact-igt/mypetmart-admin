@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useState } from "react";
+import { useAdminAuth } from "@/context/admin-auth-context";
 import { addAdminOrderNote, getAdminOrder, updateAdminOrderShippingAddress, updateAdminOrderStatus, type OrderStatus, type UpdateOrderShippingAddressInput } from "@/lib/api/admin-order-api";
 import { getValidNextOrderStatuses, isDestructiveOrderTransition } from "@/data/admin/order-status-rules";
 import { useAdminData } from "../ui/use-admin-data";
@@ -14,14 +15,21 @@ import { ShipmentPanel } from "@/components/admin/shipments/shipment-panel";
 import { CourierSelectionDialog } from "@/components/admin/shipments/courier-selection-dialog";
 import { EditShippingAddressDialog } from "@/components/admin/orders/edit-shipping-address-dialog";
 
-const currency = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 });
-
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+function formatMoney(amount: string, currencyCode: string): string {
+  try {
+    return new Intl.NumberFormat("en-IN", { style: "currency", currency: currencyCode, maximumFractionDigits: 2 }).format(Number(amount));
+  } catch {
+    return `${currencyCode} ${amount}`;
+  }
+}
+
 export function OrderDetailView({ orderId }: { orderId: string }) {
   const { showToast } = useToast();
+  const { user } = useAdminAuth();
   const fetcher = useCallback(() => getAdminOrder(orderId), [orderId]);
   const { data: order, loading, error, reload } = useAdminData(fetcher);
 
@@ -100,7 +108,15 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
   if (loading) return <LoadingState label="Loading order…" />;
   if (error || !order) return <ErrorState message={error ?? "Order not found."} onRetry={reload} />;
 
-  const statusOptions = getValidNextOrderStatuses(order.status);
+  const hasCodPayment = order.payments.some((payment) => payment.provider.toLowerCase() === "cod");
+  const paymentPendingForOnlineOrder = order.paymentStatus !== "paid" && !hasCodPayment;
+  const paidCancellationRestricted = order.paymentStatus === "paid" && user?.role !== "super_admin" && getValidNextOrderStatuses(order.status).includes("cancelled");
+  const statusOptions = getValidNextOrderStatuses(order.status).filter((next) => {
+    if (next === "cancelled" && order.paymentStatus === "paid" && user?.role !== "super_admin") return false;
+    if (["confirmed", "processing", "shipped", "delivered"].includes(next) && paymentPendingForOnlineOrder) return false;
+    return true;
+  });
+  const paymentAttempts = [...order.payments].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   // Derived purely from real persisted timestamps — no synthetic/fabricated
   // history. Payment/fulfilment/shipment milestones will extend this once
   // those modules exist.
@@ -125,6 +141,13 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
           <StatusBadge status={order.paymentStatus} />
         </div>
       </div>
+
+      {paymentPendingForOnlineOrder && (
+        <div className="rounded-lg border border-yellow-500/30 bg-yellow-50 px-4 py-3 text-sm text-text-primary" role="status">
+          <p className="font-semibold">Pending {paymentAttempts[0]?.provider ?? "online"} payment</p>
+          <p className="mt-1 text-xs text-text-primary/70">Fulfilment cannot start until payment is confirmed. The backend will enforce this rule as well.</p>
+        </div>
+      )}
 
       {order.returns.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-terracotta/30 bg-terracotta/5 px-4 py-3 text-sm">
@@ -151,25 +174,25 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
                     <p className="truncate font-medium text-text-primary">{item.productName}</p>
                     <p className="truncate text-xs text-text-primary/50">
                       SKU {item.variantSku ?? item.productSku}
-                      {item.variantName ? ` · ${item.variantName}` : ""} · Qty {item.quantity} · {currency.format(Number(item.unitPrice))} each
+                      {item.variantName ? ` · ${item.variantName}` : ""} · Qty {item.quantity} · {formatMoney(item.unitPrice, order.currency)} each
                     </p>
                   </div>
-                  <span className="shrink-0 font-medium text-text-primary">{currency.format(Number(item.lineTotal))}</span>
+                  <span className="shrink-0 font-medium text-text-primary">{formatMoney(item.lineTotal, order.currency)}</span>
                 </li>
               ))}
             </ul>
             <div className="mt-4 flex flex-col gap-1 border-t border-border-subtle pt-3 text-sm">
               <div className="flex justify-between text-text-primary/70">
                 <span>Subtotal</span>
-                <span>{currency.format(Number(order.subtotal))}</span>
+                <span>{formatMoney(order.subtotal, order.currency)}</span>
               </div>
               <div className="flex justify-between text-text-primary/70">
                 <span>Shipping</span>
-                <span>{Number(order.shippingFee) === 0 ? "Free (V1 fixed rate — pending shipping integration)" : currency.format(Number(order.shippingFee))}</span>
+                <span>{Number(order.shippingFee) === 0 ? "Free (V1 fixed rate — pending shipping integration)" : formatMoney(order.shippingFee, order.currency)}</span>
               </div>
               <div className="flex justify-between text-base font-bold text-text-primary">
                 <span>Total</span>
-                <span>{currency.format(Number(order.total))}</span>
+                <span>{formatMoney(order.total, order.currency)}</span>
               </div>
             </div>
           </div>
@@ -178,11 +201,17 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
             <div className="rounded-xl border border-border-subtle bg-white p-5">
               <h2 className="text-sm font-semibold text-text-primary">Customer</h2>
               {order.customer ? (
-                <Link href={`/admin/customers/${order.customer.id}`} className="mt-2 block text-sm font-medium text-primary-orange hover:underline">
-                  {order.customer.name}
-                </Link>
+                <div className="mt-2">
+                  <Link href={`/admin/customers/${order.customer.id}`} className="block text-sm font-medium text-primary-orange hover:underline">
+                    {order.customer.name}
+                  </Link>
+                  <p className="mt-1 text-xs text-text-primary/55">{order.customer.email}</p>
+                </div>
               ) : (
-                <p className="mt-2 text-sm font-medium text-text-primary/70">Guest</p>
+                <div className="mt-2">
+                  <p className="text-sm font-medium text-text-primary/70">Guest order</p>
+                  <p className="mt-1 text-xs text-text-primary/55">{order.contactEmail || "No contact email provided"}</p>
+                </div>
               )}
               <div className="mt-3 flex items-center justify-between">
                 <p className="text-xs font-semibold uppercase tracking-wide text-text-primary/50">Delivery address</p>
@@ -215,7 +244,7 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
               </div>
             </div>
             <div className="rounded-xl border border-border-subtle bg-white p-5">
-              <h2 className="text-sm font-semibold text-text-primary">Payment</h2>
+              <h2 className="text-sm font-semibold text-text-primary">Payment attempts</h2>
               {order.commerceException && (
                 <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
                   Payment captured, but this order needs manual review ({order.commerceException.replace(/_/g, " ")}) before it can
@@ -226,18 +255,19 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
                 <p className="mt-2 text-sm text-text-primary/55">No payment recorded yet.</p>
               ) : (
                 <div className="mt-2 flex flex-col gap-3 text-sm">
-                  {order.payments.map((payment) => (
+                  {paymentAttempts.map((payment, index) => (
                     <div key={payment.id} className="rounded-lg border border-border-subtle p-3">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-text-primary">
                           {payment.provider === "cod" ? "Cash on Delivery" : payment.provider}
                           {payment.method && payment.method !== "cod" ? ` · ${payment.method}` : ""}
+                          {index === 0 ? " · Latest attempt" : ""}
                         </span>
                         <StatusBadge status={payment.status} />
                       </div>
                       <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-text-primary/70">
                         <dt>Amount</dt>
-                        <dd className="text-right">{currency.format(Number(payment.amount))}</dd>
+                        <dd className="text-right">{formatMoney(payment.amount, payment.currency)}</dd>
                         <dt>Merchant txnid</dt>
                         <dd className="text-right font-mono">{payment.providerOrderId ?? "—"}</dd>
                         <dt>Provider payment ID</dt>
@@ -265,6 +295,9 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
                 <span className="text-xs font-semibold uppercase tracking-wide text-text-primary/50">Order payment status</span>
                 <StatusBadge status={order.paymentStatus} />
               </div>
+              {hasCodPayment && order.paymentStatus !== "paid" && (
+                <p className="mt-2 text-xs font-semibold text-text-primary/70">Cash on Delivery · Payment due on delivery.</p>
+              )}
               <p className="mt-2 text-xs text-text-primary/50">
                 Read-only — payment status is provider-authoritative (verified via PayU webhook/Verify Payment API, or set at Cash
                 on Delivery confirmation); it cannot be hand-set here.
@@ -286,6 +319,9 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
 
           <div className="rounded-xl border border-border-subtle bg-white p-5">
             <h2 className="text-sm font-semibold text-text-primary">Order status</h2>
+            {paidCancellationRestricted && (
+              <p className="mt-2 text-xs text-text-primary/60">Cancelling a paid order requires a super admin because it initiates a refund.</p>
+            )}
             {statusOptions.length === 0 ? (
               <p className="mt-2 text-sm text-text-primary/55">
                 {order.status === "cancelled" ? "This order is cancelled — no further changes are possible." : "This order has an open return request — no further status changes are possible here."}

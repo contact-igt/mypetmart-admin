@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { useRouter } from "next/navigation";
 import { getDashboardAnalytics, getDashboardFilterOptions } from "@/lib/api/admin-dashboard-api";
+import { listAdminOrders } from "@/lib/api/admin-order-api";
+import { buildRecentOrdersQuery } from "@/lib/api/admin-dashboard-contract";
 import { useAdminData } from "../ui/use-admin-data";
 import { LoadingState, ErrorState, EmptyState } from "../ui/empty-state";
 import { DashboardFilterBar } from "./dashboard-filter-bar";
@@ -47,14 +50,20 @@ const DEFAULT_FILTER: DashboardFilter = {
 };
 
 export function DashboardView() {
+  const router = useRouter();
   const [filter, setFilter] = useState<DashboardFilter>(DEFAULT_FILTER);
   const [metric, setMetric] = useState<SeriesMetric>("sales");
 
   const optionsFetcher = useCallback(() => getDashboardFilterOptions(), []);
-  const { data: options } = useAdminData(optionsFetcher);
+  const { data: options, error: optionsError, reload: reloadOptions } = useAdminData(optionsFetcher);
 
   const analyticsFetcher = useCallback(() => getDashboardAnalytics(filter), [filter]);
   const { data, loading, error, reload } = useAdminData(analyticsFetcher);
+  const recentOrdersFetcher = useCallback(
+    () => listAdminOrders(buildRecentOrdersQuery(filter)),
+    [filter],
+  );
+  const { data: recentOrdersData, loading: recentOrdersLoading, error: recentOrdersError, reload: reloadRecentOrders } = useAdminData(recentOrdersFetcher);
 
   function patchFilter(patch: Partial<DashboardFilter>) {
     setFilter((prev) => {
@@ -68,6 +77,12 @@ export function DashboardView() {
 
   function resetFilter() {
     setFilter(DEFAULT_FILTER);
+  }
+
+  function refreshDashboard() {
+    reload();
+    reloadOptions();
+    reloadRecentOrders();
   }
 
   function toggleStatus(status: DashboardOrderStatus) {
@@ -84,7 +99,12 @@ export function DashboardView() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-xl font-bold text-text-primary">Dashboard</h1>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h1 className="text-xl font-bold text-text-primary">Dashboard</h1>
+          <button type="button" onClick={refreshDashboard} className="rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-xs font-semibold text-text-primary hover:bg-cream-bg">
+            Refresh
+          </button>
+        </div>
         <p className="mt-1 text-sm text-text-primary/60">
           Commerce analytics from real Orders, Returns and Shipments. Sessions, page views and traffic sources
           are not tracked anywhere in this system, so no conversion-funnel or traffic-source numbers are shown here.
@@ -92,6 +112,11 @@ export function DashboardView() {
       </div>
 
       <DashboardFilterBar filter={filter} options={options} maxDate={TODAY_ISO} onChange={patchFilter} onReset={resetFilter} />
+      {optionsError && (
+        <p role="alert" className="rounded-lg border border-terracotta/30 bg-terracotta/5 px-4 py-3 text-xs text-terracotta">
+          Dashboard filter options could not be loaded. <button type="button" onClick={reloadOptions} className="font-semibold underline">Retry</button>
+        </p>
+      )}
 
       {data.isEmpty ? (
         <EmptyState
@@ -110,11 +135,11 @@ export function DashboardView() {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
-            <MetricComparisonCard label="Gross sales" comparison={data.summary.grossSales} showComparison={filter.compare} format={(v) => currency.format(v)} icon={<TagIcon width={16} height={16} />} />
-            <MetricComparisonCard label="Orders" comparison={data.summary.orders} showComparison={filter.compare} format={(v) => v.toLocaleString("en-IN")} icon={<ReceiptIcon width={16} height={16} />} />
-            <MetricComparisonCard label="Avg. order value" comparison={data.summary.averageOrderValue} showComparison={filter.compare} format={(v) => currency.format(v)} />
-            <MetricComparisonCard label="Customers" comparison={data.summary.customers} showComparison={filter.compare} format={(v) => v.toLocaleString("en-IN")} icon={<UsersIcon width={16} height={16} />} />
-            <MetricComparisonCard label="Open returns" comparison={data.summary.openReturns} showComparison={filter.compare} format={(v) => v.toLocaleString("en-IN")} icon={<ReturnIcon width={16} height={16} />} />
+            <MetricComparisonCard label="Collected revenue" comparison={data.summary.grossSales} showComparison={filter.compare} format={(v) => currency.format(v)} icon={<TagIcon width={16} height={16} />} />
+            <MetricComparisonCard label="Orders (excl. cancelled)" comparison={data.summary.orders} showComparison={filter.compare} format={(v) => v.toLocaleString("en-IN")} icon={<ReceiptIcon width={16} height={16} />} />
+            <MetricComparisonCard label="Avg. paid order value" comparison={data.summary.averageOrderValue} showComparison={filter.compare} format={(v) => currency.format(v)} />
+            <MetricComparisonCard label="Customers / guests with orders" comparison={data.summary.customers} showComparison={filter.compare} format={(v) => v.toLocaleString("en-IN")} icon={<UsersIcon width={16} height={16} />} />
+            <MetricComparisonCard label="Open return requests" comparison={data.summary.openReturns} showComparison={filter.compare} format={(v) => v.toLocaleString("en-IN")} icon={<ReturnIcon width={16} height={16} />} />
           </div>
 
           <SectionCard title="Sales and orders over time">
@@ -133,7 +158,24 @@ export function DashboardView() {
 
           <OrderStatusSection
             slices={data.orderStatus}
-            recentOrders={data.recentOrders}
+            recentOrders={recentOrdersData?.items.map((order) => {
+              const summaryRow = data.recentOrders.find((row) => row.orderId === order.id);
+              return {
+                orderId: order.id,
+                orderNumber: order.orderNumber,
+                customerLabel: summaryRow?.customerLabel ?? order.customer?.name ?? `${order.shipCity}, ${order.shipState}`,
+                total: Number(order.total),
+                status: order.status,
+                placedAt: order.placedAt,
+                itemCount: order.itemCount,
+                paymentStatus: order.paymentStatus,
+                currency: order.currency,
+              };
+            }) ?? data.recentOrders}
+            recentOrdersLoading={recentOrdersLoading}
+            recentOrdersError={recentOrdersError}
+            onRetryRecentOrders={reloadRecentOrders}
+            onOrderClick={(orderId) => router.push(`/admin/orders/${orderId}`)}
             activeStatus={filter.orderStatus}
             onStatusClick={toggleStatus}
           />

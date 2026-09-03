@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
-import { deleteAdminReview, getAdminReview, updateAdminReview, updateAdminReviewStatus } from "@/lib/api/admin-review-api";
+import { deleteAdminReview, getAdminReview, updateAdminReview, updateAdminReviewStatus, type UpdateAdminReviewInput } from "@/lib/api/admin-review-api";
+import { formatReviewDateOnly, formatTimestampDate, reviewDatePatch, todayInputValue } from "@/lib/review-date";
 import { useAdminData } from "../ui/use-admin-data";
 import { LoadingState, ErrorState } from "../ui/empty-state";
 import { StatusBadge } from "../ui/status-badge";
@@ -22,14 +23,14 @@ export function ReviewDetailView({ reviewId }: { reviewId: string }) {
   const { data: review, loading, error, reload } = useAdminData(fetcher);
   const [updating, setUpdating] = useState<"approved" | "rejected" | "pending" | null>(null);
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState({ rating: 5, title: "", review: "" });
+  const [draft, setDraft] = useState({ rating: 5, title: "", review: "", reviewDate: "" });
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   function startEditing() {
     if (!review) return;
-    setDraft({ rating: review.rating, title: review.title ?? "", review: review.review });
+    setDraft({ rating: review.rating, title: review.title ?? "", review: review.review, reviewDate: review.reviewDate ?? "" });
     setEditing(true);
   }
 
@@ -52,7 +53,14 @@ export function ReviewDetailView({ reviewId }: { reviewId: string }) {
     if (!draft.review.trim()) { showToast("Review content is required.", "error"); return; }
     setSaving(true);
     try {
-      await updateAdminReview(review.id, { rating: draft.rating, title: draft.title.trim() || null, review: draft.review.trim() });
+      const patch: UpdateAdminReviewInput = {
+        rating: draft.rating,
+        title: draft.title.trim() || null,
+        review: draft.review.trim(),
+        // {} when unchanged, { reviewDate: null } to clear, { reviewDate: "…" } to set.
+        ...reviewDatePatch(review.reviewDate, draft.reviewDate),
+      };
+      await updateAdminReview(review.id, patch);
       showToast("Review updated.");
       setEditing(false);
       reload();
@@ -147,11 +155,22 @@ export function ReviewDetailView({ reviewId }: { reviewId: string }) {
                   <span className="mb-1 block text-xs font-semibold text-text-primary">Review</span>
                   <textarea value={draft.review} onChange={(e) => setDraft((d) => ({ ...d, review: e.target.value }))} rows={5} maxLength={5000} className={`${ADMIN_INPUT_CLASS} resize-y`} />
                 </label>
+                <label className="text-sm">
+                  <span className="mb-1 block text-xs font-semibold text-text-primary">Review date (optional)</span>
+                  <input
+                    type="date"
+                    value={draft.reviewDate}
+                    max={todayInputValue()}
+                    onChange={(e) => setDraft((d) => ({ ...d, reviewDate: e.target.value }))}
+                    className={ADMIN_INPUT_CLASS}
+                  />
+                  <span className="mt-1 block text-xs text-text-primary/50">Date shown to customers. Clear it to fall back to the actual creation date.</span>
+                </label>
                 <div className="flex gap-2">
                   <button type="button" onClick={saveEdits} disabled={saving} className="rounded-lg bg-primary-orange px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-50">
                     {saving ? "Saving…" : "Save"}
                   </button>
-                  <button type="button" onClick={() => { setEditing(false); setDraft({ rating: review.rating, title: review.title ?? "", review: review.review }); }} disabled={saving} className="rounded-lg border border-border-subtle px-3.5 py-2 text-sm font-semibold text-text-primary hover:bg-cream-bg">
+                  <button type="button" onClick={() => { setEditing(false); setDraft({ rating: review.rating, title: review.title ?? "", review: review.review, reviewDate: review.reviewDate ?? "" }); }} disabled={saving} className="rounded-lg border border-border-subtle px-3.5 py-2 text-sm font-semibold text-text-primary hover:bg-cream-bg">
                     Cancel
                   </button>
                 </div>
@@ -197,6 +216,33 @@ export function ReviewDetailView({ reviewId }: { reviewId: string }) {
 
         <div className="flex flex-col gap-5">
           <div className="rounded-xl border border-border-subtle bg-white p-5">
+            <h2 className="text-sm font-semibold text-text-primary">Publishing</h2>
+            <dl className="mt-3 flex flex-col gap-2.5 text-sm">
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-text-primary/50">Review date</dt>
+                <dd className="text-text-primary">
+                  {review.reviewDate ? (
+                    formatReviewDateOnly(review.reviewDate)
+                  ) : (
+                    <>
+                      {formatTimestampDate(review.createdAt)}
+                      <span className="mt-0.5 block text-xs text-text-primary/50">Uses submitted date</span>
+                    </>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-text-primary/50">Created at</dt>
+                <dd className="text-text-primary">{formatDateTime(review.createdAt)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-text-primary/50">Last updated</dt>
+                <dd className="text-text-primary">{formatDateTime(review.updatedAt)}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div className="rounded-xl border border-border-subtle bg-white p-5">
             <h2 className="text-sm font-semibold text-text-primary">Customer</h2>
             <dl className="mt-3 flex flex-col gap-2.5 text-sm">
               <div>
@@ -214,10 +260,6 @@ export function ReviewDetailView({ reviewId }: { reviewId: string }) {
               <div>
                 <dt className="text-xs font-semibold uppercase tracking-wide text-text-primary/50">Verified Purchase</dt>
                 <dd className="text-text-primary">{review.verifiedPurchase ? "Yes — eligibility-verified at submission" : "No"}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-semibold uppercase tracking-wide text-text-primary/50">Last updated</dt>
-                <dd className="text-text-primary">{formatDateTime(review.updatedAt)}</dd>
               </div>
             </dl>
           </div>

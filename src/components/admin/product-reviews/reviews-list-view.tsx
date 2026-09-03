@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { listAdminReviews, type AdminReviewListItem, type ReviewSource, type ReviewStatus } from "@/lib/api/admin-review-api";
+import { resolveDisplayReviewDate } from "@/lib/review-date";
 import { useAdminData } from "../ui/use-admin-data";
 import { LoadingState, ErrorState, EmptyState } from "../ui/empty-state";
 import { DataTable, type Column } from "../ui/data-table";
@@ -15,10 +16,6 @@ const STATUSES: ReviewStatus[] = ["pending", "approved", "rejected"];
 const SOURCES: ReviewSource[] = ["customer", "admin"];
 const RATINGS = [5, 4, 3, 2, 1];
 const PAGE_SIZE = 10;
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-}
 
 function truncate(text: string, max = 80): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
@@ -46,7 +43,16 @@ export function ReviewsListView() {
     { key: "reviewSource", header: "Source", render: (r) => (r.reviewSource === "admin" ? <span className="text-xs font-semibold text-text-primary/70">Admin</span> : <span className="text-xs text-text-primary/50">Customer</span>) },
     { key: "verifiedPurchase", header: "Verified", render: (r) => (r.verifiedPurchase ? <span className="text-xs font-semibold text-primary-orange">Verified</span> : <span className="text-text-primary/40">—</span>) },
     { key: "status", header: "Status", render: (r) => <StatusBadge status={r.status} /> },
-    { key: "createdAt", header: "Submitted", render: (r) => formatDate(r.createdAt) }
+    {
+      key: "createdAt",
+      header: "Review date",
+      render: (r) => (
+        <span className="whitespace-nowrap">
+          {resolveDisplayReviewDate(r)}
+          {r.reviewDate ? <span className="block text-[11px] text-text-primary/40">Custom</span> : null}
+        </span>
+      )
+    }
   ];
 
   return (
