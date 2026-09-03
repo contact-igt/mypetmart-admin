@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createAdminReview, type ReviewStatus } from "@/lib/api/admin-review-api";
 import { describeAdminError, listAdminProducts, type ProductListItem } from "@/lib/api/admin-product-api";
+import { reviewDateForCreate, todayInputValue } from "@/lib/review-date";
 import { FormField, ADMIN_INPUT_CLASS } from "../ui/form-field";
 import { useToast } from "../ui/toast";
 
@@ -19,9 +20,11 @@ export function ReviewForm() {
   const [rating, setRating] = useState(5);
   const [title, setTitle] = useState("");
   const [review, setReview] = useState("");
+  const [reviewDate, setReviewDate] = useState("");
   const [status, setStatus] = useState<ReviewStatus>("pending");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const today = todayInputValue();
 
   useEffect(() => {
     listAdminProducts({ pageSize: 100, status: "active", sort: "name", order: "ASC" })
@@ -52,6 +55,7 @@ export function ReviewForm() {
         rating,
         title: title.trim() || undefined,
         review: review.trim(),
+        reviewDate: reviewDateForCreate(reviewDate),
         status,
       });
       showToast("Review created.");
@@ -92,6 +96,9 @@ export function ReviewForm() {
             <select id="r-status" value={status} onChange={(e) => setStatus(e.target.value as ReviewStatus)} className={ADMIN_INPUT_CLASS}>
               {STATUSES.map((s) => <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)}</option>)}
             </select>
+          </FormField>
+          <FormField label="Review Date" htmlFor="r-review-date" optional hint="This is the date shown to customers. Leave blank to use the actual creation date.">
+            <input id="r-review-date" type="date" value={reviewDate} max={today} onChange={(e) => setReviewDate(e.target.value)} className={ADMIN_INPUT_CLASS} />
           </FormField>
           <div className="sm:col-span-2">
             <FormField label="Review title" htmlFor="r-title" optional error={errors.title}>

@@ -7,6 +7,7 @@ const STATUS_LABELS: Record<string, string> = {
   approved: "Approved",
   rejected: "Rejected",
   resolved: "Resolved",
+  cancelled: "Cancelled",
 };
 
 export function ReturnsSection({ returns }: { returns: ReturnsOverview }) {

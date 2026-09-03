@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useState } from "react";
-import { addAdminReturnNote, cancelAdminReturn, createReturnShipment, getAdminReturn, initiateAdminRefund, markReturnItemReceived, refreshReturnShipment, recheckAdminRefund, reviewAdminReturn, updateAdminReplacement, type ReturnShipment } from "@/lib/api/admin-return-api";
+import { addAdminReturnNote, cancelAdminReturn, getAdminReturn, initiateAdminRefund, markReturnItemReceived, refreshReturnShipment, recheckAdminRefund, reviewAdminReturn, updateAdminReplacement, type ReturnShipment } from "@/lib/api/admin-return-api";
 import { useAdminAuth } from "@/context/admin-auth-context";
 import { useAdminData } from "../ui/use-admin-data";
 import { LoadingState, ErrorState } from "../ui/empty-state";
@@ -11,8 +11,11 @@ import { useToast } from "../ui/toast";
 import { ArrowRightIcon } from "@/components/icons";
 import { createReplacementShipment } from "@/lib/api/admin-shipment-api";
 import { ShipmentPanel } from "@/components/admin/shipments/shipment-panel";
+import { ReturnCourierSelectionDialog } from "@/components/admin/returns/return-courier-selection-dialog";
 import { requiresManualCodRefund } from "@/lib/refund-eligibility";
 import { ConfirmDialog } from "../ui/confirm-dialog";
+
+const currency = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 });
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return "—";
@@ -43,7 +46,7 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
   const [recheckingRefundId, setRecheckingRefundId] = useState<number | null>(null);
   const [updatingReplacement, setUpdatingReplacement] = useState(false);
   const [creatingShipment, setCreatingShipment] = useState(false);
-  const [creatingReturnShipment, setCreatingReturnShipment] = useState(false);
+  const [returnCourierDialogOpen, setReturnCourierDialogOpen] = useState(false);
   const [refreshingReturnShipment, setRefreshingReturnShipment] = useState(false);
   const [refreshedReturnShipment, setRefreshedReturnShipment] = useState<ReturnShipment | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -131,20 +134,6 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
       showToast(err instanceof Error ? err.message : "Could not update the replacement.", "error");
     } finally {
       setUpdatingReplacement(false);
-    }
-  }
-
-  async function handleCreateReturnShipment() {
-    if (!request) return;
-    setCreatingReturnShipment(true);
-    try {
-      await createReturnShipment(request.id);
-      showToast("Return pickup scheduled.");
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Could not create the return shipment.", "error");
-    } finally {
-      reload();
-      setCreatingReturnShipment(false);
     }
   }
 
@@ -271,14 +260,21 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
             {!returnShipment ? (
               request.status === "approved" ? (
                 <>
-                  <p className="mt-3 text-sm text-text-primary/70">Not Created</p>
+                  <div className="mt-3 rounded-lg border border-border-subtle bg-cream-bg p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-text-primary/55">Pickup Address</p>
+                    <p className="mt-1 text-sm font-semibold text-text-primary">{request.pickupAddress.recipientName}</p>
+                    <p className="text-xs text-text-primary/70">{request.pickupAddress.phone}</p>
+                    <p className="mt-0.5 text-xs text-text-primary/70">
+                      {[request.pickupAddress.line1, request.pickupAddress.line2, request.pickupAddress.city, request.pickupAddress.state, request.pickupAddress.postalCode].filter(Boolean).join(", ")}
+                    </p>
+                    {request.pickupAddress.edited && <p className="mt-1 text-[11px] text-text-primary/50">Edited — differs from the original order address.</p>}
+                  </div>
                   <button
                     type="button"
-                    onClick={handleCreateReturnShipment}
-                    disabled={creatingReturnShipment}
+                    onClick={() => setReturnCourierDialogOpen(true)}
                     className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-primary-orange px-3.5 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
                   >
-                    {creatingReturnShipment ? "Creating…" : "Create Return Pickup"}
+                    Create Return Shipment
                   </button>
                 </>
               ) : (
@@ -298,6 +294,7 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
                   <div><dt className="font-semibold">Provider Status</dt><dd>{returnShipment.providerStatus ?? "—"}</dd></div>
                   <div><dt className="font-semibold">Provider Status Code</dt><dd>{returnShipment.providerStatusCode ?? "—"}</dd></div>
                   <div><dt className="font-semibold">Service</dt><dd>{returnShipment.serviceType ?? "—"}</dd></div>
+                  <div><dt className="font-semibold">Shipping Amount</dt><dd>{returnShipment.shippingAmount ? currency.format(Number(returnShipment.shippingAmount)) : "—"}</dd></div>
                   <div>
                     <dt className="font-semibold">Tracking</dt>
                     <dd>
@@ -329,8 +326,20 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
                     {refreshedReturnShipment && <span className="text-xs text-text-primary/60" role="status">Refresh completed</span>}
                   </div>
                 )}
-                {returnShipment.status === "failed" && returnShipment.failureReason && (
-                  <p className="mt-2 text-xs text-terracotta">{returnShipment.failureReason.message}</p>
+                {returnShipment.status === "failed" && (
+                  <div className="mt-3 rounded-lg border border-terracotta/40 bg-terracotta/5 p-3">
+                    <p className="text-xs font-bold text-terracotta">Return Shipment Failed</p>
+                    {returnShipment.failureReason && <p className="mt-1 text-xs text-text-primary/80">{returnShipment.failureReason.message}</p>}
+                    {request.status === "approved" && (
+                      <button
+                        type="button"
+                        onClick={() => setReturnCourierDialogOpen(true)}
+                        className="mt-2 rounded-lg border border-terracotta px-3 py-1.5 text-xs font-semibold text-terracotta hover:bg-terracotta/10"
+                      >
+                        Edit Address &amp; Choose Courier
+                      </button>
+                    )}
+                  </div>
                 )}
                 {returnShipment.trackingEvents.length === 0 ? (
                   <p className="mt-3 text-xs text-text-primary/60">No tracking updates available yet. The courier has not provided a scan.</p>
@@ -522,6 +531,13 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
         description="This cancels the return request. It does not initiate or reverse a refund. If a reverse pickup has already progressed beyond its cancellable stage, the cancellation will be rejected safely."
         confirmLabel="Cancel Return"
         loading={cancelling}
+      />
+      <ReturnCourierSelectionDialog
+        open={returnCourierDialogOpen}
+        onClose={() => setReturnCourierDialogOpen(false)}
+        returnId={request.id}
+        pickupAddress={request.pickupAddress}
+        onChanged={reload}
       />
     </div>
   );

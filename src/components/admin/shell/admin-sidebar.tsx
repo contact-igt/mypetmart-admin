@@ -54,7 +54,7 @@ export function AdminSidebar() {
         <AdminNavList />
       </div>
       <div className="border-t border-white/10 px-3 pt-4">
-        <p className="text-[11px] text-white/40">MyPetMart Admin · Demo build</p>
+        <p className="text-[11px] text-white/40">Orders &amp; Customers live · other modules may be demo</p>
       </div>
     </aside>
   );

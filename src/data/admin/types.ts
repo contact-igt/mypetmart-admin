@@ -215,7 +215,7 @@ export type ShippingDetailsInput = {
 };
 
 export type ReturnType = "return" | "replacement";
-export type ReturnStatus = "requested" | "approved" | "rejected" | "resolved";
+export type ReturnStatus = "requested" | "approved" | "rejected" | "resolved" | "cancelled";
 
 export type ReturnRequest = {
   id: string;
@@ -401,7 +401,7 @@ export type CustomerOverview = {
 
 export type ReturnsOverview = {
   open: number;
-  statusBreakdown: { status: "requested" | "approved" | "rejected" | "resolved"; count: number }[];
+  statusBreakdown: { status: "requested" | "approved" | "rejected" | "resolved" | "cancelled"; count: number }[];
 };
 
 export type BusinessInsight = {
@@ -418,6 +418,9 @@ export type DashboardOrderRow = {
   status: DashboardOrderStatus;
   placedAt: string;
   itemCount: number;
+  /** Enriched from /admin/orders for the dashboard's recent-order widget. */
+  paymentStatus?: "pending" | "paid" | "failed" | "refunded";
+  currency?: string;
 };
 
 export type DashboardAnalyticsResult = {

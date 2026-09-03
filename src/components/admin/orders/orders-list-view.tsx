@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAdminAuth } from "@/context/admin-auth-context";
 import { listAdminProducts } from "@/lib/api/admin-product-api";
 import {
   addAdminOrderNote,
@@ -26,7 +27,6 @@ import { Dialog } from "../ui/dialog";
 import { useToast } from "../ui/toast";
 import { SearchIcon } from "@/components/icons";
 
-const currency = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
 const STATUSES: OrderStatus[] = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "return_requested"];
 const PAYMENT_STATUSES: PaymentStatus[] = ["pending", "paid", "failed", "refunded"];
 const FULFILMENT_STATUSES: FulfilmentStatus[] = ["unfulfilled", "processing", "packed", "shipped", "delivered"];
@@ -54,11 +54,21 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+function formatMoney(amount: string, currencyCode: string): string {
+  try {
+    return new Intl.NumberFormat("en-IN", { style: "currency", currency: currencyCode, maximumFractionDigits: 2 }).format(Number(amount));
+  } catch {
+    return `${currencyCode} ${amount}`;
+  }
+}
+
 export function OrdersListView() {
   const router = useRouter();
   const { showToast } = useToast();
+  const { user } = useAdminAuth();
 
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState<OrderStatus | "">("");
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus | "">("");
   const [fulfilmentStatus, setFulfilmentStatus] = useState<FulfilmentStatus | "">("");
@@ -70,6 +80,11 @@ export function OrdersListView() {
   const [sortDir, setSortDir] = useState<"ASC" | "DESC">("DESC");
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const [productOptions, setProductOptions] = useState<{ id: number; name: string }[]>([]);
   useEffect(() => {
@@ -84,7 +99,7 @@ export function OrdersListView() {
   const fetcher = useCallback(
     () =>
       listAdminOrders({
-        search: search || undefined,
+        search: debouncedSearch || undefined,
         status: status || undefined,
         paymentStatus: paymentStatus || undefined,
         fulfilmentStatus: fulfilmentStatus || undefined,
@@ -97,7 +112,7 @@ export function OrdersListView() {
         page,
         pageSize: PAGE_SIZE
       }),
-    [search, status, paymentStatus, fulfilmentStatus, productId, state, from, to, sortBy, sortDir, page]
+    [debouncedSearch, status, paymentStatus, fulfilmentStatus, productId, state, from, to, sortBy, sortDir, page]
   );
   const { data, loading, error, reload } = useAdminData(fetcher);
 
@@ -215,7 +230,7 @@ export function OrdersListView() {
     { key: "placedAt", header: "Date", render: (o) => formatDate(o.placedAt) },
     { key: "customer", header: "Customer", render: (o) => o.customer?.name ?? "Guest" },
     { key: "itemCount", header: "Items", render: (o) => o.itemCount },
-    { key: "total", header: "Total", render: (o) => currency.format(Number(o.total)) },
+    { key: "total", header: "Total", render: (o) => formatMoney(o.total, o.currency) },
     { key: "paymentStatus", header: "Payment", render: (o) => <StatusBadge status={o.paymentStatus} /> },
     { key: "fulfilmentStatus", header: "Fulfilment", render: (o) => <StatusBadge status={o.fulfilmentStatus} /> },
     { key: "status", header: "Status", render: (o) => <StatusBadge status={o.status} /> },
@@ -223,7 +238,9 @@ export function OrdersListView() {
       key: "actions",
       header: "",
       render: (o) => {
-        const nextOptions = getValidNextOrderStatuses(o.status);
+        const nextOptions = getValidNextOrderStatuses(o.status).filter(
+          (next) => next !== "cancelled" || o.paymentStatus !== "paid" || user?.role === "super_admin",
+        );
         return (
           <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
             {nextOptions.length > 0 && (
