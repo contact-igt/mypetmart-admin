@@ -10,7 +10,7 @@ import { LoadingState, ErrorState } from "../ui/empty-state";
 import { StatusBadge } from "../ui/status-badge";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import { useToast } from "../ui/toast";
-import { MailIcon, PhoneIcon, ReturnIcon } from "@/components/icons";
+import { ReturnIcon } from "@/components/icons";
 import { ShipmentPanel } from "@/components/admin/shipments/shipment-panel";
 import { CourierSelectionDialog } from "@/components/admin/shipments/courier-selection-dialog";
 import { EditShippingAddressDialog } from "@/components/admin/orders/edit-shipping-address-dialog";
@@ -226,22 +226,6 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
                 {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.postalCode}, {order.shippingAddress.country}
               </p>
               <p className="mt-1 text-xs text-text-primary/50">{order.shippingAddress.phone}</p>
-              <div className="mt-4 flex flex-wrap gap-2 border-t border-border-subtle pt-3">
-                <button
-                  type="button"
-                  onClick={() => showToast("Email integration required — not connected yet.", "info")}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors duration-150 ease-out hover:bg-cream-bg"
-                >
-                  <MailIcon width={13} height={13} /> Email customer
-                </button>
-                <button
-                  type="button"
-                  onClick={() => showToast("SMS/WhatsApp integration required — not connected yet.", "info")}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors duration-150 ease-out hover:bg-cream-bg"
-                >
-                  <PhoneIcon width={13} height={13} /> SMS customer
-                </button>
-              </div>
             </div>
             <div className="rounded-xl border border-border-subtle bg-white p-5">
               <h2 className="text-sm font-semibold text-text-primary">Payment attempts</h2>
