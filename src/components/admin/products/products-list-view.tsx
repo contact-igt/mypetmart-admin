@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { fetchAdminCategories } from "@/lib/api/admin-category-api";
 import {
   bulkDeleteAdminProducts,
@@ -12,6 +12,7 @@ import {
   getAdminProductSummary,
   listAdminProducts,
   restoreAdminProduct,
+  moveAdminProduct,
   type PetType,
   type ProductListItem,
   type ProductListStatus,
@@ -52,8 +53,8 @@ export function ProductsListView() {
   const [petType, setPetType] = useState<PetType | "">("");
   const [status, setStatus] = useState<ProductListStatus | "">("");
   const [stockLevel, setStockLevel] = useState<StockLevel | "">("");
-  const [sort, setSort] = useState<ProductSort>("created_at");
-  const [order, setOrder] = useState<"ASC" | "DESC">("DESC");
+  const [sort, setSort] = useState<ProductSort>("display_order");
+  const [order, setOrder] = useState<"ASC" | "DESC">("ASC");
   const [page, setPage] = useState(1);
   const [data, setData] = useState<ProductListResult | null>(null);
   const [summary, setSummary] = useState<ProductSummary | null>(null);
@@ -67,6 +68,20 @@ export function ProductsListView() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const tableRef = useRef<HTMLDivElement>(null);
+  const previousRows = useRef<Map<string, DOMRect> | null>(null);
+
+  useLayoutEffect(() => {
+    const before = previousRows.current;
+    previousRows.current = null;
+    if (!before || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    tableRef.current?.querySelectorAll<HTMLTableRowElement>("tbody tr[data-row-id]").forEach((row) => {
+      const previous = before.get(row.dataset.rowId ?? "");
+      if (!previous) return;
+      const distance = previous.top - row.getBoundingClientRect().top;
+      if (distance) row.animate([{ transform: `translateY(${distance}px)` }, { transform: "translateY(0)" }], { duration: 220, easing: "cubic-bezier(0.77, 0, 0.175, 1)" });
+    });
+  }, [data]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -119,12 +134,12 @@ export function ProductsListView() {
 
   const reload = useCallback(() => setReloadKey((value) => value + 1), []);
   const resetPage = () => setPage(1);
-  const hasFilters = Boolean(search || categoryId || petType || status || stockLevel || sort !== "created_at" || order !== "DESC");
+  const hasFilters = Boolean(search || categoryId || petType || status || stockLevel || sort !== "display_order" || order !== "ASC");
   const hasRefinements = Boolean(search || categoryId || petType || (status !== "deleted" && stockLevel));
   const isDeletedView = status === "deleted";
   function clearFilters() {
     setSearch(""); setCategoryId(""); setPetType(""); setStatus(""); setStockLevel("");
-    setSort("created_at"); setOrder("DESC"); setPage(1);
+    setSort("display_order"); setOrder("ASC"); setPage(1);
   }
   function clearRefinements() {
     setSearch(""); setCategoryId(""); setPetType(""); setStockLevel(""); setPage(1);
@@ -142,6 +157,30 @@ export function ProductsListView() {
     } finally { setBusy(false); }
   }
 
+  async function moveProduct(product: ProductListItem, direction: "up" | "down") {
+    if (busy || !data) return;
+    const index = data.items.findIndex((item) => item.id === product.id);
+    const otherIndex = index + (direction === "up" ? -1 : 1);
+    const neighbor = data.items[otherIndex];
+    if (index < 0) return;
+    if (neighbor) {
+      previousRows.current = new Map(Array.from(tableRef.current?.querySelectorAll<HTMLTableRowElement>("tbody tr[data-row-id]") ?? [], (row) => [row.dataset.rowId ?? "", row.getBoundingClientRect()]));
+      const items = [...data.items];
+      items[index] = { ...neighbor, displayOrder: product.displayOrder };
+      items[otherIndex] = { ...product, displayOrder: neighbor.displayOrder };
+      setData({ ...data, items });
+    }
+    setBusy(true);
+    try {
+      await moveAdminProduct(product.id, direction);
+      showToast(neighbor ? `${product.name} moved to position ${(page - 1) * PAGE_SIZE + otherIndex + 1}, ${direction === "up" ? "above" : "below"} ${neighbor.name}. Website order saved.` : `${product.name} moved ${direction} one position. Website order saved.`);
+      reload();
+    } catch (cause) {
+      showToast(describeAdminError(cause, `Could not move ${product.name}. Please try again.`), "error");
+      reload();
+    } finally { setBusy(false); }
+  }
+
   function changeSort(nextSort: ProductSort) {
     if (sort === nextSort) setOrder((value) => value === "ASC" ? "DESC" : "ASC");
     else { setSort(nextSort); setOrder("ASC"); }
@@ -149,10 +188,16 @@ export function ProductsListView() {
   }
 
   const normalColumns: Column<ProductListItem>[] = [
-    { key: "name", header: "Product", sortable: true, className: "w-[33%]", render: (product) => (
+    { key: "name", header: "Product", sortable: true, className: "w-[26%]", render: (product) => (
       <div className="flex min-w-0 items-center gap-3"><ProductThumb product={product} /><div className="min-w-0"><p className="truncate font-medium" title={product.name}>{product.name}</p><p className="truncate text-xs text-text-primary/50">{product.category.name} · {petLabels[product.petType]} · {product.hasVariants ? `${product.variantCount} variants` : "Simple"}{product.featured ? " · Featured" : ""}</p></div></div>
     ) },
-    { key: "sku", header: "SKU", className: "w-[25%]", render: (product) => <span className="block truncate text-text-primary/70" title={product.sku}>{product.sku}</span> },
+    { key: "display_order", header: "Website order", sortable: true, className: "w-[18%]", render: (product) => (
+      <div className="flex items-center gap-2">
+        <span className="w-8 tabular-nums">{product.displayOrder}</span>
+        {(["up", "down"] as const).map((direction) => <button key={direction} type="button" disabled={busy || refreshing || Boolean(status) || hasRefinements || sort !== "display_order" || order !== "ASC" || (direction === "up" ? page === 1 && data?.items[0]?.id === product.id : page === data?.totalPages && data?.items.at(-1)?.id === product.id)} onClick={() => void moveProduct(product, direction)} aria-label={"Move " + product.name + " " + direction} title={"Move " + direction} className="h-9 w-9 rounded-lg border border-border-subtle bg-white text-base hover:border-primary-orange disabled:opacity-40">{direction === "up" ? "↑" : "↓"}</button>)}
+      </div>
+    ) },
+    { key: "sku", header: "SKU", className: "w-[14%]", render: (product) => <span className="block truncate text-text-primary/70" title={product.sku}>{product.sku}</span> },
     { key: "price", header: "Price", sortable: true, className: "w-[11%] whitespace-nowrap text-right", render: (product) => <span className="whitespace-nowrap tabular-nums">{product.hasVariants ? "From " : ""}{currency.format(Number(product.price))}</span> },
     { key: "stock", header: "Stock", sortable: true, className: "w-[8%] whitespace-nowrap text-right", render: (product) => <span className={`tabular-nums ${product.stock <= 5 ? "font-semibold text-terracotta" : ""}`}>{product.stock}</span> },
     { key: "status", header: "Status", className: "w-[10%] whitespace-nowrap text-center", render: (product) => <StatusBadge status={product.status} /> },
@@ -207,7 +252,7 @@ export function ProductsListView() {
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border-subtle/70 pt-3">
         <span className="mr-1 text-xs font-semibold text-text-primary/50">Sort by</span>
-        {([['created_at','Newest'],['name','Name'],['price','Price'],['stock','Stock']] as [ProductSort,string][]).map(([value,label]) => <button key={value} type="button" onClick={() => changeSort(value)} aria-pressed={sort === value} className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${sort === value ? "border-primary-orange/30 bg-primary-orange/10 text-primary-orange" : "border-border-subtle bg-white text-text-primary/60 hover:border-primary-orange/25 hover:text-text-primary"}`}>{label}{sort === value ? (order === "ASC" ? " ↑" : " ↓") : ""}</button>)}
+        {([['display_order','Website order'],['created_at','Newest'],['name','Name'],['price','Price'],['stock','Stock']] as [ProductSort,string][]).map(([value,label]) => <button key={value} type="button" onClick={() => changeSort(value)} aria-pressed={sort === value} className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${sort === value ? "border-primary-orange/30 bg-primary-orange/10 text-primary-orange" : "border-border-subtle bg-white text-text-primary/60 hover:border-primary-orange/25 hover:text-text-primary"}`}>{label}{sort === value ? (order === "ASC" ? " ↑" : " ↓") : ""}</button>)}
         {hasFilters && <button type="button" onClick={clearFilters} className="ml-auto rounded-lg px-2 py-1.5 text-xs font-semibold text-primary-orange transition hover:bg-primary-orange/5">Clear all</button>}
       </div>
     </section>
@@ -226,11 +271,12 @@ export function ProductsListView() {
         </div>
       </div>
     )}
+    {!isDeletedView && <p className="text-xs text-text-primary/60">Use ↑ and ↓ to move products. Changes save automatically for the homepage and default shop listing. Clear filters and select Website order ascending to enable the controls.</p>}
     {refreshing && <p role="status" className="text-xs text-text-primary/50">Refreshing production catalog…</p>}
     {loading && <LoadingState label="Loading production Products…" />}
     {!loading && error && <ErrorState message={error} onRetry={reload} />}
     {!loading && !error && data?.items.length === 0 && <EmptyState title={isDeletedView ? "Deleted is empty" : "No Products found"} description={isDeletedView ? (hasRefinements ? "No deleted Products match these filters." : "Products moved to Deleted will appear here and can be restored when recovery is safe.") : (hasFilters ? "Clear filters or change the search." : "Create the first Product in the production catalog.")} action={isDeletedView ? (hasRefinements ? <button onClick={clearRefinements} className="font-semibold text-primary-orange">Clear Deleted filters</button> : undefined) : (hasFilters ? <button onClick={clearFilters} className="font-semibold text-primary-orange">Clear filters</button> : <Link href="/admin/products/new" className="font-semibold text-primary-orange">Add Product</Link>)} />}
-    {!loading && !error && data && data.items.length > 0 && <div><DataTable columns={columns} rows={data.items} getRowId={(product) => String(product.id)} sortBy={sort} sortDir={order === "ASC" ? "asc" : "desc"} onSort={(key) => changeSort(key === "name" || key === "price" || key === "stock" ? key : "created_at")} selectedIds={isDeletedView ? undefined : selectedIds} onSelectionChange={isDeletedView ? undefined : setSelectedIds} tableClassName="min-w-[1100px] table-fixed" /><Pagination page={data.page} pageSize={data.pageSize} total={data.total} onPageChange={setPage} /></div>}
+    {!loading && !error && data && data.items.length > 0 && <div><div ref={tableRef}><DataTable columns={columns} rows={data.items} getRowId={(product) => String(product.id)} sortBy={sort} sortDir={order === "ASC" ? "asc" : "desc"} onSort={(key) => changeSort(key === "display_order" || key === "name" || key === "price" || key === "stock" ? key : "created_at")} selectedIds={isDeletedView ? undefined : selectedIds} onSelectionChange={isDeletedView ? undefined : setSelectedIds} tableClassName="min-w-[1100px] table-fixed" /></div><Pagination page={data.page} pageSize={data.pageSize} total={data.total} onPageChange={setPage} /></div>}
     <ConfirmDialog open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} onConfirm={() => deleteTarget && runMutation(() => deleteAdminProduct(deleteTarget.id), `Moved “${deleteTarget.name}” to Deleted.`)} title="Move Product to Deleted?" description={`“${deleteTarget?.name ?? "This Product"}” will leave normal Product and Storefront lists. Its Variants and images will be preserved for restoration.`} confirmLabel="Move to Deleted" loading={busy} />
     <ConfirmDialog open={Boolean(restoreTarget)} onClose={() => setRestoreTarget(null)} onConfirm={() => restoreTarget && runMutation(() => restoreAdminProduct(restoreTarget.id), "Product restored successfully. It is now in Draft status.")} title="Restore Product?" description={`Restore “${restoreTarget?.name ?? "this Product"}” with its original ID, slug, SKU, Variants, and images? It will return as Draft.`} confirmLabel="Restore" destructive={false} loading={busy} />
     <ConfirmDialog open={bulkDeleteOpen} onClose={() => setBulkDeleteOpen(false)} onConfirm={() => runMutation(() => bulkDeleteAdminProducts([...selectedIds].map(Number)), `Moved ${selectedIds.size} Products to Deleted.`)} title="Move selected Products to Deleted?" description={`${selectedIds.size} selected Products will leave normal Product and Storefront lists. Their Variants and images will be preserved for restoration.`} confirmLabel="Move to Deleted" loading={busy} />

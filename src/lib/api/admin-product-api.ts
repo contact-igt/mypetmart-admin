@@ -4,7 +4,7 @@ export type ProductStatus = "active" | "draft" | "archived";
 export type ProductListStatus = ProductStatus | "deleted";
 export type PetType = "dog" | "cat" | "all";
 export type StockLevel = "in_stock" | "low_stock" | "out_of_stock";
-export type ProductSort = "created_at" | "price" | "name" | "stock";
+export type ProductSort = "display_order" | "created_at" | "price" | "name" | "stock";
 
 export type ProductImage = {
   id: number;
@@ -115,6 +115,7 @@ export type ProductListItem = {
   stock: number;
   hasVariants: boolean;
   featured: boolean;
+  displayOrder: number;
   weightGrams: number | null;
   lengthCm: string | null;
   widthCm: string | null;
@@ -207,6 +208,7 @@ export type ProductInput = {
   compareAtPrice?: string | null;
   stock?: number;
   featured: boolean;
+
   tags: string[];
   metaTitle?: string | null;
   metaDescription?: string | null;
@@ -307,6 +309,10 @@ export function createAdminProduct(input: CreateProductInput): Promise<ProductDe
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export function moveAdminProduct(productId: number, direction: "up" | "down"): Promise<{ moved: boolean }> {
+  return adminApiRequest(`/admin/products/${productId}/website-order`, { method: "PATCH", body: JSON.stringify({ direction }) });
 }
 
 export function updateAdminProduct(productId: number | string, input: Partial<ProductInput>): Promise<ProductDetail> {

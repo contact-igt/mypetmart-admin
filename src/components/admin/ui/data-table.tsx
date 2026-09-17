@@ -114,6 +114,7 @@ export function DataTable<T>({
             return (
               <tr
                 key={id}
+                data-row-id={id}
                 className={`border-b border-border-subtle/70 transition-colors last:border-b-0 hover:bg-cream-bg/30 ${
                   onRowClick ? "cursor-pointer" : ""
                 }`}
