@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { useAdminAuth } from "@/context/admin-auth-context";
-import { addAdminOrderNote, getAdminOrder, updateAdminOrderShippingAddress, updateAdminOrderStatus, type OrderStatus, type UpdateOrderShippingAddressInput } from "@/lib/api/admin-order-api";
+import { addAdminOrderNote, getAdminOrder, updateAdminOrderShippingAddress, updateAdminOrderStatus, verifyAdminPayuPayment, type OrderStatus, type UpdateOrderShippingAddressInput } from "@/lib/api/admin-order-api";
 import { getValidNextOrderStatuses, isDestructiveOrderTransition } from "@/data/admin/order-status-rules";
 import { useAdminData } from "../ui/use-admin-data";
 import { LoadingState, ErrorState } from "../ui/empty-state";
@@ -74,6 +74,21 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
   // customer's saved Address book) ----
   const [editingAddress, setEditingAddress] = useState(false);
   const [savingAddress, setSavingAddress] = useState(false);
+  const [verifyingPayment, setVerifyingPayment] = useState(false);
+
+  async function handleVerifyPayuPayment() {
+    if (!order) return;
+    setVerifyingPayment(true);
+    try {
+      const result = await verifyAdminPayuPayment(order.id);
+      showToast(result.paymentStatus === "paid" ? "PayU payment verified and finalized." : "PayU did not report a completed payment yet.", result.paymentStatus === "paid" ? "success" : "error");
+      reload();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Could not verify the PayU payment.", "error");
+    } finally {
+      setVerifyingPayment(false);
+    }
+  }
 
   async function handleUpdateAddress(input: UpdateOrderShippingAddressInput) {
     if (!order) return;
@@ -279,6 +294,11 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
                 <span className="text-xs font-semibold uppercase tracking-wide text-text-primary/50">Order payment status</span>
                 <StatusBadge status={order.paymentStatus} />
               </div>
+              {order.paymentStatus === "pending" && order.payments.some((payment) => payment.provider === "payu") && (
+                <button type="button" onClick={() => void handleVerifyPayuPayment()} disabled={verifyingPayment} className="mt-3 rounded-lg border border-primary-orange px-3 py-2 text-xs font-semibold text-primary-orange hover:bg-primary-orange/5 disabled:opacity-50">
+                  {verifyingPayment ? "Verifying with PayU..." : "Verify with PayU"}
+                </button>
+              )}
               {hasCodPayment && order.paymentStatus !== "paid" && (
                 <p className="mt-2 text-xs font-semibold text-text-primary/70">Cash on Delivery · Payment due on delivery.</p>
               )}

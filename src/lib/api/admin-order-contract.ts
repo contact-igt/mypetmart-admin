@@ -5,7 +5,7 @@ export function buildAdminOrderPath(orderId: number | string): string {
 
 export function buildAdminOrderActionPath(
   orderId: number | string,
-  action: "status" | "shipping-address" | "notes",
+  action: "status" | "shipping-address" | "notes" | "verify-payu",
 ): string {
   return `${buildAdminOrderPath(orderId)}/${action}`;
 }
