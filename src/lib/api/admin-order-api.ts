@@ -162,6 +162,16 @@ export type BulkUpdateOrderStatusResult = {
   skipped: number;
 };
 
+export type AdminPayuVerificationResult = {
+  paymentStatus: PaymentStatus;
+  orderId: number;
+  orderStatus: OrderStatus;
+  amount: string;
+  currency: string;
+  commerceException: string | null;
+  verification: "verified" | "not_required" | "unavailable";
+};
+
 // Mirrors backend OrderModels/order.types.ts UpdateOrderShippingAddressInput.
 // Full replacement of the Order's own shipping snapshot only — never the
 // customer's saved Address book entry.
@@ -213,6 +223,10 @@ export function addAdminOrderNote(orderId: number | string, message: string): Pr
     method: "POST",
     body: serializeAdminOrderBody({ message })
   });
+}
+
+export function verifyAdminPayuPayment(orderId: number | string): Promise<AdminPayuVerificationResult> {
+  return adminApiRequest<AdminPayuVerificationResult>(buildAdminOrderActionPath(orderId, "verify-payu"), { method: "POST" });
 }
 
 // Deliberately NOT implemented in V1 — no Backend route exists for these yet

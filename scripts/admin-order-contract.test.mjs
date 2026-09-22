@@ -42,6 +42,7 @@ test("detail and mutation routes use the numeric order resource path safely", ()
   assert.equal(buildAdminOrderActionPath(42, "status"), "/admin/orders/42/status");
   assert.equal(buildAdminOrderActionPath(42, "shipping-address"), "/admin/orders/42/shipping-address");
   assert.equal(buildAdminOrderActionPath(42, "notes"), "/admin/orders/42/notes");
+  assert.equal(buildAdminOrderActionPath(42, "verify-payu"), "/admin/orders/42/verify-payu");
 });
 
 test("mutation bodies preserve the backend contracts", () => {
