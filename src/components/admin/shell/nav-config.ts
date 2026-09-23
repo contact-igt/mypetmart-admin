@@ -3,6 +3,7 @@ import {
   GridViewIcon,
   BoxIcon,
   TagIcon,
+  CouponIcon,
   ReceiptIcon,
   UsersIcon,
   ReturnIcon,
@@ -10,6 +11,8 @@ import {
   ChartIcon,
   GearIcon,
   MailIcon,
+  MegaphoneIcon,
+  PopupWindowIcon,
 } from "@/components/icons";
 import type { ComponentType, SVGProps } from "react";
 
@@ -41,6 +44,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     label: "Sales",
     items: [
       { label: "Orders", href: "/admin/orders", icon: ReceiptIcon },
+      { label: "Coupons", href: "/admin/coupons", icon: CouponIcon },
       { label: "Shipments", href: "/admin/shipments", icon: BoxIcon },
       { label: "Customers", href: "/admin/customers", icon: UsersIcon },
       { label: "Returns", href: "/admin/returns", icon: ReturnIcon },
@@ -55,7 +59,11 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
   },
   {
     label: "Configuration",
-    items: [{ label: "Settings", href: "/admin/settings", icon: GearIcon }],
+    items: [
+      { label: "Announcement Bar", href: "/admin/announcement-bar", icon: MegaphoneIcon },
+      { label: "Welcome Popups", href: "/admin/welcome-popups", icon: PopupWindowIcon },
+      { label: "Settings", href: "/admin/settings", icon: GearIcon },
+    ],
   },
 ];
 
@@ -87,10 +95,14 @@ export function getBreadcrumbs(pathname: string): Breadcrumb[] {
   if (rest.length === 0) return crumbs;
 
   const [second, third] = rest;
-  if (second === "new") {
-    crumbs.push({ label: "Add product" });
-  } else if (third === "edit") {
-    crumbs.push({ label: "Edit product" });
+  if (second === "new" || third === "edit") {
+    // Was hardcoded to "product" regardless of section (a pre-existing bug —
+    // e.g. Categories' own /new page already showed "Add product"); fixed
+    // here as part of wiring in Welcome Popups' /new and /[id]/edit pages,
+    // which need this to say "popup", not "product".
+    const formNoun: Record<string, string> = { products: "product", categories: "category", "welcome-popups": "popup", coupons: "coupon" };
+    const noun = formNoun[section] ?? "item";
+    crumbs.push({ label: second === "new" ? `Add ${noun}` : `Edit ${noun}` });
   } else {
     const detailLabel: Record<string, string> = {
       orders: "Order detail",
@@ -99,6 +111,7 @@ export function getBreadcrumbs(pathname: string): Breadcrumb[] {
       shipments: "Shipment detail",
       "contact-enquiries": "Enquiry detail",
       "product-reviews": "Review detail",
+      coupons: third === "redemptions" ? "Redemption history" : "Coupon detail",
     };
     crumbs.push({ label: detailLabel[section] ?? "Detail" });
   }
