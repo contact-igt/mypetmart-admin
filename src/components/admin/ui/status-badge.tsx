@@ -17,7 +17,12 @@ const TONE_CLASSES: Record<string, string> = {
   // product statuses
   active: "bg-mint-sage text-text-primary",
   draft: "bg-cream-bg text-text-primary/70 border border-border-subtle",
+  inactive: "bg-deep-brown/10 text-deep-brown",
   archived: "bg-deep-brown/10 text-deep-brown",
+  // coupon redemption statuses
+  reserved: "bg-yellow-card text-text-primary",
+  consumed: "bg-mint-sage text-text-primary",
+  released: "bg-deep-brown/10 text-deep-brown",
   // customer account statuses
   disabled: "bg-terracotta/15 text-terracotta",
   // return statuses

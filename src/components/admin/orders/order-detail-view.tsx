@@ -198,15 +198,21 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
             </ul>
             <div className="mt-4 flex flex-col gap-1 border-t border-border-subtle pt-3 text-sm">
               <div className="flex justify-between text-text-primary/70">
-                <span>Subtotal</span>
+                <span>Original merchandise subtotal</span>
                 <span>{formatMoney(order.subtotal, order.currency)}</span>
               </div>
+              {order.coupon && (
+                <div className="flex justify-between text-text-primary/70">
+                  <span>Coupon ({order.coupon.code})</span>
+                  <span>-{formatMoney(order.coupon.discountAmount, order.currency)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-text-primary/70">
-                <span>Shipping</span>
-                <span>{Number(order.shippingFee) === 0 ? "Free (V1 fixed rate — pending shipping integration)" : formatMoney(order.shippingFee, order.currency)}</span>
+                <span>Shipping amount</span>
+                <span>{formatMoney(order.shippingFee, order.currency)}</span>
               </div>
               <div className="flex justify-between text-base font-bold text-text-primary">
-                <span>Total</span>
+                <span>Final paid total</span>
                 <span>{formatMoney(order.total, order.currency)}</span>
               </div>
             </div>

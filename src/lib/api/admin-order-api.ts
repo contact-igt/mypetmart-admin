@@ -26,6 +26,13 @@ export type OrderItem = {
   quantity: number;
   unitPrice: string;
   lineTotal: string;
+  discountAllocated?: string;
+};
+
+export type OrderCoupon = {
+  code: string;
+  eligibleMerchandiseSubtotal: string;
+  discountAmount: string;
 };
 
 export type OrderShippingAddress = {
@@ -121,6 +128,8 @@ export type AdminOrderDetail = AdminOrderListItem & {
   notes: OrderNote[];
   returns: OrderReturn[];
   shipment?: Shipment | null;
+  totalBeforeDiscount?: string;
+  coupon?: OrderCoupon | null;
 };
 
 export type AdminOrderSummary = {

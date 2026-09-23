@@ -273,6 +273,45 @@ export function TagIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function MegaphoneIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M3.5 10.5v3a1.5 1.5 0 0 0 1.5 1.5h1l1.6 5a1 1 0 0 0 .95.7h1.05a1 1 0 0 0 .95-1.32L9.4 15h.1l9.5 3.2a.5.5 0 0 0 .66-.47V6.27a.5.5 0 0 0-.66-.47L9.5 9h-4.5A1.5 1.5 0 0 0 3.5 10.5Z" />
+      <path d="M19.5 9.5a3 3 0 0 1 0 5" />
+    </svg>
+  );
+}
+
+export function PopupWindowIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <rect x="3.5" y="5.5" width="17" height="13" rx="2" />
+      <path d="M3.5 9h17" />
+      <circle cx="6.3" cy="7.2" r="0.6" fill="currentColor" stroke="none" />
+      <rect x="7.5" y="11" width="5.5" height="5" rx="1" />
+      <path d="M15 12h4.5M15 14.5h4.5" />
+    </svg>
+  );
+}
+
 export function ReceiptIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
@@ -580,6 +619,26 @@ export function LogoutIcon(props: SVGProps<SVGSVGElement>) {
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
       <path d="M16 17l5-5-5-5" />
       <path d="M21 12H9" />
+    </svg>
+  );
+}
+
+export function CouponIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4Z" />
+      <path d="M9.5 9l5 6" />
+      <circle cx="9.75" cy="9.75" r=".25" fill="currentColor" />
+      <circle cx="14.25" cy="14.25" r=".25" fill="currentColor" />
     </svg>
   );
 }
