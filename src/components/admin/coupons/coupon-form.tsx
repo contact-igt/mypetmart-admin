@@ -14,6 +14,7 @@ import {
   type Coupon,
   type CouponDiscountType,
   type CouponInput,
+  type CouponPaymentMethodEligibility,
 } from "@/lib/api/admin-coupon-api";
 import { fetchAdminCategories } from "@/lib/api/admin-category-api";
 import { listAdminProducts, type ProductListItem } from "@/lib/api/admin-product-api";
@@ -37,6 +38,7 @@ type FormState = {
   usageLimit: string;
   perCustomerLimit: string;
   firstOrderOnly: boolean;
+  paymentMethodEligibility: CouponPaymentMethodEligibility;
   eligibleProductIds: number[];
   eligibleCategoryIds: number[];
 };
@@ -53,6 +55,7 @@ const EMPTY_FORM: FormState = {
   usageLimit: "",
   perCustomerLimit: "",
   firstOrderOnly: false,
+  paymentMethodEligibility: "both",
   eligibleProductIds: [],
   eligibleCategoryIds: [],
 };
@@ -74,6 +77,7 @@ function fromForm(coupon: Coupon): FormState {
     usageLimit: coupon.usageLimit !== null ? String(coupon.usageLimit) : "",
     perCustomerLimit: coupon.perCustomerLimit !== null ? String(coupon.perCustomerLimit) : "",
     firstOrderOnly: coupon.firstOrderOnly,
+    paymentMethodEligibility: coupon.paymentMethodEligibility ?? "both",
     eligibleProductIds: coupon.eligibleProductIds,
     eligibleCategoryIds: coupon.eligibleCategoryIds,
   };
@@ -197,6 +201,7 @@ export function CouponForm({ couponId }: { couponId?: string }) {
       usageLimit: form.usageLimit.trim() ? Number(form.usageLimit) : null,
       perCustomerLimit: form.perCustomerLimit.trim() ? Number(form.perCustomerLimit) : null,
       firstOrderOnly: form.firstOrderOnly,
+      paymentMethodEligibility: form.paymentMethodEligibility,
       eligibleProductIds: form.eligibleProductIds,
       eligibleCategoryIds: form.eligibleCategoryIds,
     };
@@ -426,6 +431,77 @@ export function CouponForm({ couponId }: { couponId?: string }) {
           <input type="checkbox" checked={form.firstOrderOnly} onChange={(e) => update("firstOrderOnly", e.target.checked)} />
           First order only <span className="text-text-primary/50">(authenticated customers only — guests can&rsquo;t use this coupon)</span>
         </label>
+      </section>
+
+      <section className="rounded-xl border border-border-subtle bg-white p-4 sm:p-5">
+        <h2 className="mb-4 text-sm font-semibold">Payment method eligibility</h2>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label
+            className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
+              form.paymentMethodEligibility === "both"
+                ? "border-primary-orange bg-primary-orange/5"
+                : "border-border-subtle hover:border-text-primary/20"
+            } ${locked ? "cursor-not-allowed opacity-60" : ""}`}
+          >
+            <input
+              type="radio"
+              name="paymentMethodEligibility"
+              value="both"
+              disabled={locked}
+              checked={form.paymentMethodEligibility === "both"}
+              onChange={() => update("paymentMethodEligibility", "both")}
+              className="mt-0.5 text-primary-orange focus:ring-primary-orange"
+            />
+            <div>
+              <p className="text-sm font-semibold text-text-primary">Both methods</p>
+              <p className="mt-0.5 text-xs text-text-primary/60">Valid for both Prepaid (PayU) and Cash on Delivery</p>
+            </div>
+          </label>
+
+          <label
+            className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
+              form.paymentMethodEligibility === "payu"
+                ? "border-primary-orange bg-primary-orange/5"
+                : "border-border-subtle hover:border-text-primary/20"
+            } ${locked ? "cursor-not-allowed opacity-60" : ""}`}
+          >
+            <input
+              type="radio"
+              name="paymentMethodEligibility"
+              value="payu"
+              disabled={locked}
+              checked={form.paymentMethodEligibility === "payu"}
+              onChange={() => update("paymentMethodEligibility", "payu")}
+              className="mt-0.5 text-primary-orange focus:ring-primary-orange"
+            />
+            <div>
+              <p className="text-sm font-semibold text-text-primary">Prepaid only</p>
+              <p className="mt-0.5 text-xs text-text-primary/60">Valid only for Pay Online (PayU). COD orders show savings if switched</p>
+            </div>
+          </label>
+
+          <label
+            className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
+              form.paymentMethodEligibility === "cod"
+                ? "border-primary-orange bg-primary-orange/5"
+                : "border-border-subtle hover:border-text-primary/20"
+            } ${locked ? "cursor-not-allowed opacity-60" : ""}`}
+          >
+            <input
+              type="radio"
+              name="paymentMethodEligibility"
+              value="cod"
+              disabled={locked}
+              checked={form.paymentMethodEligibility === "cod"}
+              onChange={() => update("paymentMethodEligibility", "cod")}
+              className="mt-0.5 text-primary-orange focus:ring-primary-orange"
+            />
+            <div>
+              <p className="text-sm font-semibold text-text-primary">Cash on Delivery only</p>
+              <p className="mt-0.5 text-xs text-text-primary/60">Valid only when Cash on Delivery is selected</p>
+            </div>
+          </label>
+        </div>
       </section>
 
       <EligibilitySection

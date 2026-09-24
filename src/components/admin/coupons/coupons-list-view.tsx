@@ -105,7 +105,15 @@ export function CouponsListView() {
       header: "Coupon",
       render: (c) => (
         <div className="min-w-0">
-          <p className="font-mono text-sm font-semibold text-text-primary">{c.code}</p>
+          <div className="flex items-center gap-1.5">
+            <p className="font-mono text-sm font-semibold text-text-primary">{c.code}</p>
+            {c.paymentMethodEligibility === "payu" && (
+              <span className="rounded bg-mint-sage/40 px-1.5 py-0.5 text-[10px] font-medium text-deep-brown" title="Prepaid only">Prepaid</span>
+            )}
+            {c.paymentMethodEligibility === "cod" && (
+              <span className="rounded bg-peach-hero/60 px-1.5 py-0.5 text-[10px] font-medium text-deep-brown" title="Cash on Delivery only">COD</span>
+            )}
+          </div>
           <p className="mt-0.5 truncate text-xs text-text-primary/50">{c.name}</p>
         </div>
       ),
