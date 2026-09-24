@@ -32,6 +32,7 @@ import { AdminApiError, adminApiRequest } from "@/lib/api/admin-api-client";
 // ---------------------------------------------------------------------------
 
 export type CouponDiscountType = "percentage" | "fixed";
+export type CouponPaymentMethodEligibility = "both" | "payu" | "cod";
 export type CouponStatus = "draft" | "active" | "inactive";
 export type CouponRedemptionStatus = "reserved" | "consumed" | "released";
 
@@ -51,6 +52,7 @@ export type Coupon = {
   usageLimit: number | null;
   perCustomerLimit: number | null;
   firstOrderOnly: boolean;
+  paymentMethodEligibility: CouponPaymentMethodEligibility;
   status: CouponStatus;
   usedCount: number;
   remainingUses: number | null;
@@ -78,6 +80,7 @@ type BackendCoupon = {
   usageLimit: number | null;
   perCustomerLimit: number | null;
   firstOrderOnly: boolean;
+  paymentMethodEligibility?: CouponPaymentMethodEligibility;
   status: CouponStatus;
   usedCount: number;
   remainingUses: number | null;
@@ -133,6 +136,7 @@ export type CouponInput = {
   usageLimit: number | null;
   perCustomerLimit: number | null;
   firstOrderOnly: boolean;
+  paymentMethodEligibility: CouponPaymentMethodEligibility;
   eligibleProductIds: number[];
   eligibleCategoryIds: number[];
 };
@@ -164,6 +168,7 @@ function toCoupon(c: BackendCoupon): Coupon {
     usageLimit: c.usageLimit,
     perCustomerLimit: c.perCustomerLimit,
     firstOrderOnly: c.firstOrderOnly,
+    paymentMethodEligibility: c.paymentMethodEligibility ?? "both",
     status: c.status,
     usedCount: c.usedCount,
     remainingUses: c.remainingUses,
@@ -209,6 +214,7 @@ export function toRequestBody(input: CouponInput) {
     usageLimit: input.usageLimit,
     perCustomerLimit: input.perCustomerLimit,
     firstOrderOnly: input.firstOrderOnly,
+    paymentMethodEligibility: input.paymentMethodEligibility,
     eligibleProductIds: input.eligibleProductIds,
     eligibleCategoryIds: input.eligibleCategoryIds,
   };
