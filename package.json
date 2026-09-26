@@ -15,6 +15,7 @@
     "test:admin-order-contract": "node scripts/admin-order-contract.test.mjs",
     "test:admin-dashboard-contract": "node scripts/admin-dashboard-contract.test.mjs",
     "test:refund-ui": "node --test scripts/refund-eligibility.test.mjs",
+    "test:coupon-edit-policy": "node --experimental-strip-types --test scripts/coupon-edit-policy.test.mjs",
     "test:review-date": "node --test scripts/review-date.test.mjs",
     "dev:admin": "next dev -p 4000",
     "build:admin": "next build",

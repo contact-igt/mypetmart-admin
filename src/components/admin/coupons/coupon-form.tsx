@@ -20,6 +20,7 @@ import { fetchAdminCategories } from "@/lib/api/admin-category-api";
 import { listAdminProducts, type ProductListItem } from "@/lib/api/admin-product-api";
 import type { Category } from "@/data/admin/types";
 import { AdminApiError } from "@/lib/api/admin-api-client";
+import { isCouponFieldEditable, type CouponFormField } from "@/lib/coupon-edit-policy";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import { ErrorState, LoadingState } from "../ui/empty-state";
 import { FormField, ADMIN_INPUT_CLASS } from "../ui/form-field";
@@ -103,6 +104,7 @@ export function CouponForm({ couponId }: { couponId?: string }) {
   const [categories, setCategories] = useState<Category[]>([]);
 
   const locked = coupon?.hasReservations ?? false;
+  const fieldLocked = (field: CouponFormField) => !isCouponFieldEditable(field, locked);
 
   const loadCoupon = useCallback(async () => {
     if (!couponId) return;
@@ -302,8 +304,8 @@ export function CouponForm({ couponId }: { couponId?: string }) {
 
       {locked && (
         <div role="alert" className="rounded-lg border border-yellow-500/30 bg-yellow-50 p-3 text-sm text-text-primary">
-          This coupon has already been used on at least one order. Its code, discount terms, and eligibility can no longer be
-          changed — only its name, dates, usage limits, and status can still be edited.
+          This coupon has already been used on at least one order. Its code, discount, validity dates, usage limits and
+          eligibility can no longer be changed — only its internal name and its status can still be edited.
         </div>
       )}
 
@@ -394,10 +396,10 @@ export function CouponForm({ couponId }: { couponId?: string }) {
         <h2 className="mb-4 text-sm font-semibold">Validity period</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField label="Start date" htmlFor="c-starts-at" optional hint="Leave blank to start immediately.">
-            <input id="c-starts-at" type="date" value={form.startsAt} onChange={(e) => update("startsAt", e.target.value)} className={ADMIN_INPUT_CLASS} />
+            <input id="c-starts-at" type="date" value={form.startsAt} disabled={fieldLocked("startsAt")} onChange={(e) => update("startsAt", e.target.value)} className={`${ADMIN_INPUT_CLASS} disabled:cursor-not-allowed disabled:bg-cream-bg/60`} />
           </FormField>
           <FormField label="Expiry date" htmlFor="c-ends-at" optional error={errors.endsAt} hint="Leave blank for no expiry.">
-            <input id="c-ends-at" type="date" value={form.endsAt} onChange={(e) => update("endsAt", e.target.value)} aria-invalid={Boolean(errors.endsAt)} className={ADMIN_INPUT_CLASS} />
+            <input id="c-ends-at" type="date" value={form.endsAt} disabled={fieldLocked("endsAt")} onChange={(e) => update("endsAt", e.target.value)} aria-invalid={Boolean(errors.endsAt)} className={`${ADMIN_INPUT_CLASS} disabled:cursor-not-allowed disabled:bg-cream-bg/60`} />
           </FormField>
         </div>
       </section>
@@ -406,7 +408,7 @@ export function CouponForm({ couponId }: { couponId?: string }) {
         <h2 className="mb-4 text-sm font-semibold">Usage limits</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField label="Global usage limit" htmlFor="c-usage-limit" optional error={errors.usageLimit} hint="Total number of orders this coupon can be used on. Leave blank for unlimited.">
-            <input id="c-usage-limit" type="number" min="1" step="1" value={form.usageLimit} onChange={(e) => update("usageLimit", e.target.value)} aria-invalid={Boolean(errors.usageLimit)} className={ADMIN_INPUT_CLASS} />
+            <input id="c-usage-limit" type="number" min="1" step="1" value={form.usageLimit} disabled={fieldLocked("usageLimit")} onChange={(e) => update("usageLimit", e.target.value)} aria-invalid={Boolean(errors.usageLimit)} className={`${ADMIN_INPUT_CLASS} disabled:cursor-not-allowed disabled:bg-cream-bg/60`} />
           </FormField>
           <FormField
             label="Per-customer limit"
@@ -421,14 +423,15 @@ export function CouponForm({ couponId }: { couponId?: string }) {
               min="1"
               step="1"
               value={form.perCustomerLimit}
+              disabled={fieldLocked("perCustomerLimit")}
               onChange={(e) => update("perCustomerLimit", e.target.value)}
               aria-invalid={Boolean(errors.perCustomerLimit)}
-              className={ADMIN_INPUT_CLASS}
+              className={`${ADMIN_INPUT_CLASS} disabled:cursor-not-allowed disabled:bg-cream-bg/60`}
             />
           </FormField>
         </div>
         <label className="mt-4 flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={form.firstOrderOnly} onChange={(e) => update("firstOrderOnly", e.target.checked)} />
+          <input type="checkbox" checked={form.firstOrderOnly} disabled={fieldLocked("firstOrderOnly")} onChange={(e) => update("firstOrderOnly", e.target.checked)} />
           First order only <span className="text-text-primary/50">(authenticated customers only — guests can&rsquo;t use this coupon)</span>
         </label>
       </section>
