@@ -19,9 +19,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isLoading) {
       if (!isAuthenticated && !isLoginPage) {
-        router.push("/admin/login");
+        router.replace("/admin/login");
       } else if (isAuthenticated && isLoginPage) {
-        router.push("/admin");
+        router.replace("/admin");
       }
     }
   }, [isLoading, isAuthenticated, isLoginPage, router]);

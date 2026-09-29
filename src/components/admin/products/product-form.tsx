@@ -18,6 +18,7 @@ import {
   uploadAdminProductImage,
   type PendingProductImage,
   type PetType,
+  type ProductPaymentMethodEligibility,
   type ProductDetail,
   type ProductStatus,
 } from "@/lib/api/admin-product-api";
@@ -37,7 +38,7 @@ import { CloseIcon, CopyIcon } from "@/components/icons";
 type FormState = {
   productType: "simple" | "variant";
   name: string; slug: string; sku: string; brand: string; description: string; categoryId: string;
-  petType: PetType; status: ProductStatus; featured: boolean;
+  petType: PetType; status: ProductStatus; featured: boolean; paymentMethodEligibility: ProductPaymentMethodEligibility;
   price: string; compareAtPrice: string; stock: string;
   weightGrams: string; lengthCm: string; widthCm: string; heightCm: string;
   tags: string[]; metaTitle: string; metaDescription: string;
@@ -46,7 +47,7 @@ type FormState = {
 
 const EMPTY_FORM: FormState = {
   productType: "simple", name: "", slug: "", sku: "", brand: "", description: "", categoryId: "",
-  petType: "all", status: "draft", featured: false, price: "", compareAtPrice: "", stock: "0",
+  petType: "all", status: "draft", featured: false, paymentMethodEligibility: "both", price: "", compareAtPrice: "", stock: "0",
   weightGrams: "", lengthCm: "", widthCm: "", heightCm: "", tags: [], metaTitle: "", metaDescription: "",
   howToUse: "", careInstructions: "", safetyInfo: "",
 };
@@ -76,7 +77,7 @@ function fromProduct(product: ProductDetail): FormState {
   return {
     productType: product.hasVariants ? "variant" : "simple", name: product.name ?? "", slug: product.slug ?? "",
     sku: product.sku ?? "", brand: product.brand ?? "", description: product.description ?? "", categoryId: String(product.categoryId), petType: product.petType,
-    status: product.status, featured: Boolean(product.featured), price: product.price ?? "", compareAtPrice: product.compareAtPrice ?? "",
+    status: product.status, featured: Boolean(product.featured), paymentMethodEligibility: product.paymentMethodEligibility ?? "both", price: product.price ?? "", compareAtPrice: product.compareAtPrice ?? "",
     stock: String(product.stock ?? 0), weightGrams: product.weightGrams == null ? "" : String(product.weightGrams),
     lengthCm: product.lengthCm ?? "", widthCm: product.widthCm ?? "", heightCm: product.heightCm ?? "",
     tags: normalizeProductTags(product.tags), metaTitle: product.metaTitle ?? "", metaDescription: product.metaDescription ?? "",
@@ -88,6 +89,12 @@ const nullableDecimal = (value: string) => value.trim() || null;
 const nullableInteger = (value: string) => value.trim() ? Number(value) : null;
 const MONEY_PATTERN = /^\d{1,8}(?:\.\d{1,2})?$/;
 const SHIPPING_PATTERN = /^\d{1,6}(?:\.\d{1,2})?$/;
+
+const PAYMENT_METHOD_OPTIONS: Array<{ value: ProductPaymentMethodEligibility; label: string; description: string }> = [
+  { value: "both", label: "Both methods", description: "Customers can pay online or by Cash on Delivery." },
+  { value: "payu", label: "Pay Online only", description: "This product cannot be ordered using Cash on Delivery." },
+  { value: "cod", label: "Cash on Delivery only", description: "This product cannot be ordered using online payment." }
+];
 
 export function ProductForm({ productId }: { productId?: string }) {
   const router = useRouter();
@@ -226,7 +233,7 @@ export function ProductForm({ productId }: { productId?: string }) {
       categoryId: Number(form.categoryId), name: form.name.trim(),
       sku: form.sku.trim(), brand: nullableDecimal(form.brand), description: form.description.trim(), petType: form.petType,
       ...(form.productType === "simple" ? { price: form.price, compareAtPrice: nullableDecimal(form.compareAtPrice), stock: Number(form.stock) } : {}),
-      featured: form.featured, tags: form.tags, metaTitle: nullableDecimal(form.metaTitle), metaDescription: nullableDecimal(form.metaDescription),
+      featured: form.featured, paymentMethodEligibility: form.paymentMethodEligibility, tags: form.tags, metaTitle: nullableDecimal(form.metaTitle), metaDescription: nullableDecimal(form.metaDescription),
       weightGrams: nullableInteger(form.weightGrams), lengthCm: nullableDecimal(form.lengthCm), widthCm: nullableDecimal(form.widthCm), heightCm: nullableDecimal(form.heightCm),
       howToUse: nullableDecimal(form.howToUse), careInstructions: nullableDecimal(form.careInstructions), safetyInfo: nullableDecimal(form.safetyInfo),
     };
@@ -359,6 +366,21 @@ export function ProductForm({ productId }: { productId?: string }) {
       <label className="flex items-center gap-2 self-end pb-2 text-sm"><input type="checkbox" checked={form.featured} onChange={(e) => update("featured",e.target.checked)} /> Featured Product</label>
       <div className="sm:col-span-2"><FormField label="Tags" htmlFor="p-tags" optional hint="Press Enter or comma to add."><div className="flex flex-wrap gap-1.5 rounded-lg border border-border-subtle p-2">{form.tags.map((tag) => <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-cream-bg px-2 py-1 text-xs">{tag}<button type="button" onClick={() => update("tags",form.tags.filter((item) => item!==tag))} aria-label={`Remove ${tag}`}><CloseIcon width={10} /></button></span>)}<input id="p-tags" value={tagDraft} onChange={(e) => { if (e.target.value.endsWith(",")) { setTagDraft(e.target.value.slice(0,-1)); addTag(); } else setTagDraft(e.target.value); }} onKeyDown={(e) => { if(e.key==="Enter"){e.preventDefault();addTag();} }} onBlur={addTag} className="min-w-32 flex-1 border-0 bg-transparent text-sm outline-none" /></div></FormField></div>
     </div></section>
+    <section className="rounded-xl border border-border-subtle bg-white p-4 sm:p-5">
+      <h2 className="mb-1 text-sm font-semibold">Payment method availability</h2>
+      <p className="mb-4 text-xs text-text-primary/50">Checkout only offers methods that every product in the cart allows. Existing pending orders keep the setting they were placed with.</p>
+      <div className="grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="Payment method availability">
+        {PAYMENT_METHOD_OPTIONS.map((option) => (
+          <label key={option.value} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${form.paymentMethodEligibility === option.value ? "border-primary-orange bg-primary-orange/5" : "border-border-subtle hover:border-text-primary/20"}`}>
+            <input type="radio" name="paymentMethodEligibility" value={option.value} checked={form.paymentMethodEligibility === option.value} onChange={() => update("paymentMethodEligibility", option.value)} className="mt-0.5 text-primary-orange focus:ring-primary-orange" />
+            <div>
+              <p className="text-sm font-semibold text-text-primary">{option.label}</p>
+              <p className="mt-0.5 text-xs text-text-primary/60">{option.description}</p>
+            </div>
+          </label>
+        ))}
+      </div>
+    </section>
     {form.productType === "simple" ? <section className="rounded-xl border border-border-subtle bg-white p-4 sm:p-5"><h2 className="mb-4 text-sm font-semibold">Pricing and inventory</h2><div className="grid gap-4 sm:grid-cols-3"><FormField label="Price (₹)" htmlFor="p-price" error={errors.price}><input id="p-price" type="number" min="0" step="0.01" value={form.price} onChange={(e) => update("price",e.target.value)} aria-invalid={Boolean(errors.price)} aria-describedby={errors.price ? "p-price-error" : undefined} className={ADMIN_INPUT_CLASS} /></FormField><FormField label="Compare-at price (₹)" htmlFor="p-compare" optional error={errors.compareAtPrice}><input id="p-compare" type="number" min="0" step="0.01" value={form.compareAtPrice} onChange={(e) => update("compareAtPrice",e.target.value)} aria-invalid={Boolean(errors.compareAtPrice)} aria-describedby={errors.compareAtPrice ? "p-compare-error" : undefined} className={ADMIN_INPUT_CLASS} /></FormField><FormField label="Stock" htmlFor="p-stock" error={errors.stock}><input id="p-stock" type="number" min="0" step="1" value={form.stock} onChange={(e) => update("stock",e.target.value)} aria-invalid={Boolean(errors.stock)} aria-describedby={errors.stock ? "p-stock-error" : undefined} className={ADMIN_INPUT_CLASS} /></FormField></div></section> : <VariantManager ref={variantManagerRef} key={product ? `variants-${product.updatedAt}-${product.variants.map((variant) => variant.updatedAt).join("-")}` : "new-variants"} productId={numericProductId} productStatus={form.status} variants={product?.variants} drafts={isEditing ? undefined : variantDrafts} onDraftsChange={(next) => { setVariantDrafts(next); setDirty(true); }} onDirtyChange={setVariantsDirty} onChanged={refreshRelatedData} />}
     <section className="rounded-xl border border-border-subtle bg-white p-4 sm:p-5"><h2 className="mb-1 text-sm font-semibold">Shipping defaults</h2><p className="mb-4 text-xs text-text-primary/50">Optional shipping information. Variants inherit these values when their override is blank.</p><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><FormField label="Weight (g)" htmlFor="p-weight" optional error={errors.weightGrams}><input id="p-weight" type="number" min="1" step="1" value={form.weightGrams} onChange={(e) => update("weightGrams",e.target.value)} aria-invalid={Boolean(errors.weightGrams)} aria-describedby={errors.weightGrams ? "p-weight-error" : undefined} className={ADMIN_INPUT_CLASS} /></FormField>{([['lengthCm','Length (cm)'],['widthCm','Width (cm)'],['heightCm','Height (cm)']] as const).map(([field,label]) => <FormField key={field} label={label} htmlFor={`p-${field}`} optional error={errors[field]}><input id={`p-${field}`} type="number" min="0.01" step="0.01" value={form[field]} onChange={(e) => update(field,e.target.value)} aria-invalid={Boolean(errors[field])} aria-describedby={errors[field] ? `p-${field}-error` : undefined} className={ADMIN_INPUT_CLASS} /></FormField>)}</div></section>
     <FeatureManager ref={featureManagerRef} key={product ? `features-${product.updatedAt}-${product.features.map((feature) => feature.updatedAt).join("-")}` : "new-features"} productId={numericProductId} features={product?.features} drafts={isEditing ? undefined : featureDrafts} onDraftsChange={(next) => { setFeatureDrafts(next); setDirty(true); }} onDirtyChange={setFeaturesDirty} onChanged={refreshRelatedData} />{errors.features && <p role="alert" className="text-sm font-medium text-terracotta">{errors.features}</p>}

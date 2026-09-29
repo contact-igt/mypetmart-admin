@@ -27,11 +27,18 @@ export type OrderItem = {
   unitPrice: string;
   lineTotal: string;
   discountAllocated?: string;
+  onlinePaymentDiscountAllocated?: string;
 };
 
 export type OrderCoupon = {
   code: string;
   eligibleMerchandiseSubtotal: string;
+  discountAmount: string;
+};
+
+export type OrderOnlinePaymentDiscount = {
+  discountType: "percentage" | "fixed";
+  discountValue: string;
   discountAmount: string;
 };
 
@@ -67,6 +74,7 @@ export type AdminOrderListItem = {
   placedAt: string;
   // null for a guest Order — no authenticated customer placed it.
   customer: OrderCustomer | null;
+  recipientName: string;
   shipState: string;
   shipCity: string;
 };
@@ -130,6 +138,7 @@ export type AdminOrderDetail = AdminOrderListItem & {
   shipment?: Shipment | null;
   totalBeforeDiscount?: string;
   coupon?: OrderCoupon | null;
+  onlinePaymentDiscount?: OrderOnlinePaymentDiscount | null;
 };
 
 export type AdminOrderSummary = {

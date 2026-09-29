@@ -189,7 +189,7 @@ export function ProductsListView() {
 
   const normalColumns: Column<ProductListItem>[] = [
     { key: "name", header: "Product", sortable: true, className: "w-[26%]", render: (product) => (
-      <div className="flex min-w-0 items-center gap-3"><ProductThumb product={product} /><div className="min-w-0"><p className="truncate font-medium" title={product.name}>{product.name}</p><p className="truncate text-xs text-text-primary/50">{product.category.name} · {petLabels[product.petType]} · {product.hasVariants ? `${product.variantCount} variants` : "Simple"}{product.featured ? " · Featured" : ""}</p></div></div>
+      <div className="flex min-w-0 items-center gap-3"><ProductThumb product={product} /><div className="min-w-0"><p className="truncate font-medium" title={product.name}>{product.name}</p><p className="truncate text-xs text-text-primary/50">{product.category.name} · {petLabels[product.petType]} · {product.hasVariants ? `${product.variantCount} variants` : "Simple"}{product.featured ? " · Featured" : ""}</p>{product.paymentMethodEligibility && product.paymentMethodEligibility !== "both" && <span className="mt-1 inline-block rounded-md bg-primary-orange/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary-orange" title="Payment method availability">{product.paymentMethodEligibility === "payu" ? "Pay Online" : "COD"}</span>}</div></div>
     ) },
     { key: "display_order", header: "Website order", sortable: true, className: "w-[18%]", render: (product) => (
       <div className="flex items-center gap-2">

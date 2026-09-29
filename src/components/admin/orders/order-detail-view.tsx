@@ -207,6 +207,12 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
                   <span>-{formatMoney(order.coupon.discountAmount, order.currency)}</span>
                 </div>
               )}
+              {order.onlinePaymentDiscount && (
+                <div className="flex justify-between text-text-primary/70">
+                  <span>Pay Online Discount</span>
+                  <span>-{formatMoney(order.onlinePaymentDiscount.discountAmount, order.currency)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-text-primary/70">
                 <span>Shipping amount</span>
                 <span>{formatMoney(order.shippingFee, order.currency)}</span>

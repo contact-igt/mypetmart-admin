@@ -11,6 +11,13 @@ export type IntegrationsStatus = {
   analytics: IntegrationStatus;
 };
 
+export type PayOnlineDiscountSettings = {
+  enabled: boolean;
+  discountType: "percentage" | "fixed";
+  discountValue: string;
+  updatedAt: string | null;
+};
+
 export function getStoreProfile(): Promise<StoreSettings> {
   return adminApiRequest<StoreSettings>("/admin/settings/store");
 }
@@ -28,4 +35,12 @@ export function getIntegrationsStatus(): Promise<IntegrationsStatus> {
 
 export function listAdminUsers(): Promise<SafeAdminUser[]> {
   return adminApiRequest<SafeAdminUser[]>("/admin/settings/admins");
+}
+
+export function getPayOnlineDiscount(): Promise<PayOnlineDiscountSettings> {
+  return adminApiRequest<PayOnlineDiscountSettings>("/admin/settings/pay-online-discount");
+}
+
+export function updatePayOnlineDiscount(input: Omit<PayOnlineDiscountSettings, "updatedAt">): Promise<PayOnlineDiscountSettings> {
+  return adminApiRequest<PayOnlineDiscountSettings>("/admin/settings/pay-online-discount", { method: "PUT", body: JSON.stringify(input) });
 }
