@@ -3,6 +3,8 @@ import { AdminApiError, adminApiRequest } from "@/lib/api/admin-api-client";
 export type ProductStatus = "active" | "draft" | "archived";
 export type ProductListStatus = ProductStatus | "deleted";
 export type PetType = "dog" | "cat" | "all";
+// Which payment methods a Product may be bought with (mirrors backend PRODUCT_PAYMENT_METHOD_ELIGIBILITY_VALUES).
+export type ProductPaymentMethodEligibility = "both" | "payu" | "cod";
 export type StockLevel = "in_stock" | "low_stock" | "out_of_stock";
 export type ProductSort = "display_order" | "created_at" | "price" | "name" | "stock";
 
@@ -115,6 +117,7 @@ export type ProductListItem = {
   stock: number;
   hasVariants: boolean;
   featured: boolean;
+  paymentMethodEligibility: ProductPaymentMethodEligibility;
   displayOrder: number;
   weightGrams: number | null;
   lengthCm: string | null;
@@ -208,6 +211,7 @@ export type ProductInput = {
   compareAtPrice?: string | null;
   stock?: number;
   featured: boolean;
+  paymentMethodEligibility?: ProductPaymentMethodEligibility;
 
   tags: string[];
   metaTitle?: string | null;

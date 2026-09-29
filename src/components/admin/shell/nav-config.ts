@@ -62,6 +62,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     items: [
       { label: "Announcement Bar", href: "/admin/announcement-bar", icon: MegaphoneIcon },
       { label: "Welcome Popups", href: "/admin/welcome-popups", icon: PopupWindowIcon },
+      { label: "Pay Online Discount", href: "/admin/pay-online-discount", icon: GearIcon },
       { label: "Settings", href: "/admin/settings", icon: GearIcon },
     ],
   },

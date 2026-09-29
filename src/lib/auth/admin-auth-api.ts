@@ -48,9 +48,9 @@ export async function adminGetMe(): Promise<SafeAdminUser> {
 
 export async function adminLogout(): Promise<void> {
   try {
-    if (getAdminAccessToken()) {
-      await adminApiRequest<null>("/admin/auth/logout", { method: "POST" });
-    }
+    // Logout is cookie-authenticated; do not trigger a refresh/retry cycle
+    // while ending a session.
+    await adminPublicRequest<null>("/admin/auth/logout", { method: "POST" });
   } catch {
     // Local logout must still complete if the session is already invalid.
   } finally {

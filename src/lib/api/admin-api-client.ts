@@ -47,12 +47,21 @@ export class AdminApiError extends Error {
 
 let accessToken: string | null = null;
 let refreshPromise: Promise<string> | null = null;
+const ADMIN_REFRESH_LOCK = "mypetmart:admin-refresh-lock";
+const ADMIN_ACCESS_TOKEN_KEY = "mypetmart:admin-access-token";
 
 export function setAdminAccessToken(token: string | null): void {
   accessToken = token;
+  if (typeof window !== "undefined") {
+    if (token) localStorage.setItem(ADMIN_ACCESS_TOKEN_KEY, token);
+    else localStorage.removeItem(ADMIN_ACCESS_TOKEN_KEY);
+  }
 }
 
 export function getAdminAccessToken(): string | null {
+  if (!accessToken && typeof window !== "undefined") {
+    accessToken = localStorage.getItem(ADMIN_ACCESS_TOKEN_KEY);
+  }
   return accessToken;
 }
 
@@ -153,9 +162,34 @@ async function performRefresh(): Promise<string> {
   return data.accessToken;
 }
 
+async function performRefreshAcrossTabs(): Promise<string> {
+  if (typeof window === "undefined") return performRefresh();
+
+  const owner = crypto.randomUUID();
+  const expiresAt = () => Date.now() + 5_000;
+  while (true) {
+    try {
+      const existing = JSON.parse(localStorage.getItem(ADMIN_REFRESH_LOCK) ?? "null") as { owner: string; expiresAt: number } | null;
+      if (!existing || existing.expiresAt < Date.now()) {
+        localStorage.setItem(ADMIN_REFRESH_LOCK, JSON.stringify({ owner, expiresAt: expiresAt() }));
+        if (JSON.parse(localStorage.getItem(ADMIN_REFRESH_LOCK) ?? "null")?.owner === owner) {
+          try {
+            return await performRefresh();
+          } finally {
+            if (JSON.parse(localStorage.getItem(ADMIN_REFRESH_LOCK) ?? "null")?.owner === owner) localStorage.removeItem(ADMIN_REFRESH_LOCK);
+          }
+        }
+      }
+    } catch {
+      return performRefresh();
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 25));
+  }
+}
+
 export function refreshAdminSession(): Promise<string> {
   if (!refreshPromise) {
-    refreshPromise = performRefresh()
+    refreshPromise = performRefreshAcrossTabs()
       .catch((error: unknown) => {
         signalExpiredSession();
         throw error;
