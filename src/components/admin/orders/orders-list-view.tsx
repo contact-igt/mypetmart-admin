@@ -228,7 +228,7 @@ export function OrdersListView() {
   const columns: Column<AdminOrderListItem>[] = [
     { key: "orderNumber", header: "Order", render: (o) => <span className="font-medium">{o.orderNumber}</span> },
     { key: "placedAt", header: "Date", render: (o) => formatDate(o.placedAt) },
-    { key: "customer", header: "Customer", render: (o) => o.customer?.name ?? `${o.recipientName} (Guest)` },
+    { key: "customer", header: "Customer", render: (o) => o.customer?.name ?? (o.recipientName?.trim() ? `${o.recipientName} (Guest)` : "Guest") },
     { key: "itemCount", header: "Items", render: (o) => o.itemCount },
     { key: "total", header: "Total", render: (o) => formatMoney(o.total, o.currency) },
     { key: "paymentStatus", header: "Payment", render: (o) => <StatusBadge status={o.paymentStatus} /> },
