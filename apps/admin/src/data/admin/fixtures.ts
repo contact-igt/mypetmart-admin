@@ -395,14 +395,15 @@ function buildOrder(
     timeline.push({ id: "t5", label: "Cancelled", at: daysAgo(Math.max(daysBack - 1, 0), 12) });
   }
 
-  const location = CUSTOMER_LOCATION[customer.id] ?? { city: "Chennai", state: "Tamil Nadu" };
+  const customerId = String(customer.id);
+  const location = CUSTOMER_LOCATION[customerId] ?? { city: "Chennai", state: "Tamil Nadu" };
   const shippingMethod: Order["shippingMethod"] = index % 3 === 0 ? "express" : "standard";
   const hasShipped = shippedStages.includes(status);
 
   return {
     id: `order-${index + 1}`,
     orderNumber: `MPM-${1024 + index}`,
-    customerId: customer.id,
+    customerId,
     customerName: customer.name,
     status,
     fulfilmentStatus: initialFulfilmentStatus(status),

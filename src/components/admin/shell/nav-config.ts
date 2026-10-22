@@ -48,6 +48,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
       { label: "Shipments", href: "/admin/shipments", icon: BoxIcon },
       { label: "Customers", href: "/admin/customers", icon: UsersIcon },
       { label: "Returns", href: "/admin/returns", icon: ReturnIcon },
+      { label: "Breeze Reconciliation", href: "/admin/breeze", icon: ReceiptIcon },
       { label: "Product Reviews", href: "/admin/product-reviews", icon: StarIcon },
       { label: "Newsletter", href: "/admin/newsletter", icon: MailIcon },
       { label: "Contact Enquiries", href: "/admin/contact-enquiries", icon: MailIcon },
