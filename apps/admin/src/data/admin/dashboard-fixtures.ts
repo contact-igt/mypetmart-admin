@@ -130,13 +130,14 @@ function generateEvents(): CommerceEvent[] {
       const source = weightedPick(rng, TRAFFIC_SOURCE_WEIGHTS);
       const location = weightedPick(rng, INDIA_LOCATIONS);
       const returningCustomer = rng() < 0.3 ? CUSTOMERS[Math.floor(rng() * CUSTOMERS.length)] : null;
+      const returningCustomerId = returningCustomer ? String(returningCustomer.id) : undefined;
 
       events.push({
         id: `${sessionId}-start`,
         type: "session_started",
         at,
         sessionId,
-        customerId: returningCustomer?.id,
+        customerId: returningCustomerId,
         source,
         state: location.state,
         city: location.city,
@@ -155,7 +156,7 @@ function generateEvents(): CommerceEvent[] {
           type: "product_viewed",
           at,
           sessionId,
-          customerId: returningCustomer?.id,
+          customerId: returningCustomerId,
           productId,
           source,
           state: location.state,
@@ -172,7 +173,7 @@ function generateEvents(): CommerceEvent[] {
         type: "added_to_cart",
         at,
         sessionId,
-        customerId: returningCustomer?.id,
+        customerId: returningCustomerId,
         productId: primaryProductId,
         quantity: cartQuantity,
         source,
@@ -187,7 +188,7 @@ function generateEvents(): CommerceEvent[] {
         type: "checkout_started",
         at,
         sessionId,
-        customerId: returningCustomer?.id,
+        customerId: returningCustomerId,
         productId: primaryProductId,
         source,
         state: location.state,
@@ -198,7 +199,7 @@ function generateEvents(): CommerceEvent[] {
 
       orderCounter += 1;
       const orderId = `evt-order-${orderCounter}`;
-      const customerId = returningCustomer ? returningCustomer.id : `guest-${(guestCounter += 1)}`;
+      const customerId = returningCustomerId ?? `guest-${(guestCounter += 1)}`;
       const shippingMode: ShippingMode = rng() < 0.72 ? "standard" : "express";
       const orderStatus = computeOrderStatus(rng, daysAgo, shippingMode);
 
