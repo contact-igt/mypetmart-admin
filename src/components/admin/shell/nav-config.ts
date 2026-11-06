@@ -3,7 +3,6 @@ import {
   GridViewIcon,
   BoxIcon,
   TagIcon,
-  CouponIcon,
   ReceiptIcon,
   UsersIcon,
   ReturnIcon,
@@ -44,7 +43,6 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     label: "Sales",
     items: [
       { label: "Orders", href: "/admin/orders", icon: ReceiptIcon },
-      { label: "Coupons", href: "/admin/coupons", icon: CouponIcon },
       { label: "Shipments", href: "/admin/shipments", icon: BoxIcon },
       { label: "Customers", href: "/admin/customers", icon: UsersIcon },
       { label: "Returns", href: "/admin/returns", icon: ReturnIcon },
